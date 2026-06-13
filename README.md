@@ -53,6 +53,6 @@ Binary-Sensor; lebt als Hysterese-State im Coordinator). Heat nutzt das Gate **n
 
 ## Status
 
-**v0.1.0 — Erstbau.** Backend + Pure-Logic-Tests grün, lokal `py_compile`-clean.
-Live-Verifikation (Coordinator-Timer/Apply/Override-Warden) steht aus. Apply ist
-default **aus** (Shadow). Siehe `FAHRPLAN.md`.
+**v0.1.1 — FLEET-54 source migration.** Default/Migration für den Window-Open-
+Contract zeigt auf `sensor.benni_combined_opening_unsafe_for_rollo` aus
+`benni_core_devices`; Apply bleibt default **aus** (Shadow). Siehe `FAHRPLAN.md`.

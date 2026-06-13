@@ -16,6 +16,7 @@ from homeassistant.helpers import selector
 
 from .const import (
     CONF_APPLY_ENABLED,
+    CONFIG_ENTRY_VERSION,
     CONF_COVER_ENTITY,
     CONF_PROFILE,
     CONF_STARTUP_BLOCK_SECONDS,
@@ -115,7 +116,7 @@ def _coerce_options(user_input: dict[str, Any]) -> dict[str, Any]:
 
 
 class BlindPolicyConfigFlow(ConfigFlow, domain=DOMAIN):
-    VERSION = 1
+    VERSION = CONFIG_ENTRY_VERSION
 
     def __init__(self) -> None:
         self._profile: str = DEFAULT_PROFILE_ROUTE

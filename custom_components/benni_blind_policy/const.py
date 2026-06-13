@@ -19,6 +19,7 @@ MODULE_ID: Final[str] = "blind_policy"
 NAME: Final[str] = "Blind Policy"
 
 STORAGE_VERSION: Final[int] = 1
+CONFIG_ENTRY_VERSION: Final[int] = 2
 
 # Datenwurzel in hass.data[DOMAIN].
 DATA_COORDINATOR: Final[str] = "coordinator"
@@ -169,6 +170,9 @@ CONF_GAMING_SOURCE: Final = "gaming_source_entity"
 CONF_WEATHER_CONDITION: Final = "weather_condition_entity"   # R8 (sunny)
 CONF_OUTDOOR_TEMP: Final = "outdoor_temp_entity"            # R8 (≥ 24 °C)
 
+LEGACY_WINDOW_OPEN_ENTITY: Final = "binary_sensor.opening_unsafe_for_rollo_combined"
+CORE_WINDOW_OPEN_ENTITY: Final = "sensor.benni_combined_opening_unsafe_for_rollo"
+
 # Options.
 CONF_APPLY_ENABLED: Final = "apply_enabled"
 CONF_STARTUP_BLOCK_SECONDS: Final = "startup_block_seconds"
@@ -189,7 +193,7 @@ DEFAULT_STARTUP_BLOCK_SECONDS: Final = 15
 PROFILE_PREFILL: Final[dict[str, dict[str, str]]] = {
     PROFILE_BENNI: {
         CONF_COVER_ENTITY: "cover.living_blackout_blind",
-        CONF_WINDOW_OPEN: "binary_sensor.opening_unsafe_for_rollo_combined",
+        CONF_WINDOW_OPEN: CORE_WINDOW_OPEN_ENTITY,
         CONF_BIO_STATE: "sensor.benni_core_state_bio_state",
         CONF_DAY_STATE: "sensor.benni_core_state_day_state",
         CONF_DAY_CONTEXT: "sensor.benni_core_state_day_context",

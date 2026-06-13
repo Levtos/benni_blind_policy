@@ -13,6 +13,7 @@ from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall
 
 from .const import (
+    CONFIG_ENTRY_VERSION,
     CONF_POSITION_PROFILE,
     DATA_COORDINATOR,
     DATA_SKIP_RELOAD_COUNT,
@@ -23,6 +24,7 @@ from .const import (
     SERVICE_SET_PRIVACY_BED,
 )
 from .coordinator import BlindPolicyCoordinator, all_coordinators
+from .migration import migrate_source_ids
 from .view import async_remove_view, async_setup_view
 from .websocket_api import async_setup_websocket_api
 
@@ -30,6 +32,22 @@ _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS: list[Platform] = [Platform.SENSOR, Platform.BINARY_SENSOR, Platform.SWITCH]
 _WS_FLAG = "_ws_registered"
+
+
+async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Migrate existing entries to current source contracts."""
+    if entry.version > CONFIG_ENTRY_VERSION:
+        return False
+
+    changed, data, options = migrate_source_ids(entry.data, entry.options)
+    if changed or entry.version != CONFIG_ENTRY_VERSION:
+        hass.config_entries.async_update_entry(
+            entry,
+            data=data,
+            options=options,
+            version=CONFIG_ENTRY_VERSION,
+        )
+    return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

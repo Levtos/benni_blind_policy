@@ -31,7 +31,9 @@ def _load(modname: str, filename: str):
 
 
 const = _load("const", "const.py")
+migration = _load("migration", "migration.py")
 policy = _load("policy", "policy.py")
 
 sys.modules["bbp_const"] = const
+sys.modules["bbp_migration"] = migration
 sys.modules["bbp_policy"] = policy
