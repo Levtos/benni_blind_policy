@@ -1,0 +1,32 @@
+apply_now:
+  name: Apply now
+  description: >-
+    Erzwingt eine sofortige Neuberechnung der Prioritätskette und (sofern
+    apply_enabled) ein Anfahren der Zielposition.
+
+set_privacy_bed:
+  name: Set privacy bed
+  description: Setzt/löscht den manuellen Bett-Modus (R2, höchste manuelle Priorität).
+  fields:
+    enabled:
+      name: Enabled
+      description: true = Bett-Modus an, false = aus.
+      default: true
+      selector:
+        boolean:
+
+clear_manual_override:
+  name: Clear manual override
+  description: Löscht einen aktiven Manual-Override und nimmt die Automatik wieder auf.
+
+set_position_profile:
+  name: Set position profile
+  description: >-
+    Überschreibt die Zielpositionen je Modus (z.B. {"glare_tv": 55}). Nur bekannte
+    Modus-Schlüssel werden übernommen, Werte auf 0..100 begrenzt.
+  fields:
+    position_profile:
+      name: Position profile
+      description: Dict mode -> position (0..100).
+      selector:
+        object:

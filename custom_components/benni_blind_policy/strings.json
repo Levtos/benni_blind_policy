@@ -1,0 +1,76 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Blind Policy — Profil",
+        "description": "Route wählen. Dieselbe Logik, profil-spezifische Default-Quellen (FLEET-16).",
+        "data": {
+          "profile": "Profil"
+        }
+      },
+      "sources": {
+        "title": "Quellen verdrahten",
+        "description": "Vorbelegt mit den bekannten Live-Entities des Profils (nur wenn vorhanden). Heat wird in-policy aus Wetterlage + Außentemperatur + Sonnenhöhe berechnet.",
+        "data": {
+          "cover_entity": "Rollo (cover)",
+          "window_open_entity": "Fenster offen (on = Flügel offen)",
+          "bio_state_entity": "Bio-State",
+          "day_state_entity": "Day State",
+          "day_context_entity": "Day Context",
+          "presence_household_entity": "Haushaltsanwesenheit",
+          "lux_entity": "Außenhelligkeit (lx)",
+          "sun_entity": "Sonne (sun.sun — Elevation)",
+          "media_scenario_entity": "Media Scenario",
+          "gaming_source_entity": "Gaming Source",
+          "weather_condition_entity": "Wetterlage (sunny/…)",
+          "outdoor_temp_entity": "Außentemperatur (°C)"
+        }
+      },
+      "options": {
+        "title": "Optionen",
+        "data": {
+          "apply_enabled": "Apply aktiv (aus = Shadow-Mode)",
+          "startup_block_seconds": "Startup-Block (Sekunden)"
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "Für dieses Profil ist bereits eine Blind Policy konfiguriert."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Blind Policy bearbeiten",
+        "menu_options": {
+          "sources": "Quellen",
+          "options": "Optionen"
+        }
+      },
+      "sources": {
+        "title": "Quellen",
+        "data": {
+          "cover_entity": "Rollo (cover)",
+          "window_open_entity": "Fenster offen (on = Flügel offen)",
+          "bio_state_entity": "Bio-State",
+          "day_state_entity": "Day State",
+          "day_context_entity": "Day Context",
+          "presence_household_entity": "Haushaltsanwesenheit",
+          "lux_entity": "Außenhelligkeit (lx)",
+          "sun_entity": "Sonne (sun.sun — Elevation)",
+          "media_scenario_entity": "Media Scenario",
+          "gaming_source_entity": "Gaming Source",
+          "weather_condition_entity": "Wetterlage (sunny/…)",
+          "outdoor_temp_entity": "Außentemperatur (°C)"
+        }
+      },
+      "options": {
+        "title": "Optionen",
+        "data": {
+          "apply_enabled": "Apply aktiv (aus = Shadow-Mode)",
+          "startup_block_seconds": "Startup-Block (Sekunden)"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "domain": "benni_blind_policy",
+  "name": "Benni Blind Policy",
+  "version": "0.1.0",
+  "documentation": "https://github.com/Levtos/benni_blind_policy",
+  "issue_tracker": "https://github.com/Levtos/benni_blind_policy/issues",
+  "codeowners": ["@Levtos"],
+  "config_flow": true,
+  "iot_class": "calculated",
+  "integration_type": "service",
+  "dependencies": ["http", "websocket_api", "frontend"],
+  "after_dependencies": ["benni_core_state", "benni_core_devices", "benni_media_state"],
+  "requirements": []
+}
