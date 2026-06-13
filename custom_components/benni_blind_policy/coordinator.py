@@ -409,7 +409,14 @@ class BlindPolicyCoordinator:
 
     def _reset_override_on_dayphase(self, ctx: policy.Context) -> None:
         """R-MO: Override löst sich beim Day-State-Wechsel (vor _update_privacy_latch
-        gemerkt — daher hier eigener Vergleich gegen den noch alten prev)."""
+        gemerkt — daher hier eigener Vergleich gegen den noch alten prev).
+
+        REVIEW (Live): ``self._prev_day_state`` wird von ZWEI Stellen gelesen/geschrieben
+        — hier (Vergleich gegen den Vorzyklus-Wert) und in ``_update_privacy_latch``
+        (Fortschreiben). Die Reihenfolge in ``async_evaluate`` (Reset VOR Latch-Update)
+        ist bewusst so. Falls beim Live-Test der Override nach einem Tagesphasen-Wechsel
+        nicht sauber löst, ist diese Ordering-Kopplung die erste Stelle zum Anschauen.
+        """
         if (
             self._manual_override
             and ctx.day_state is not None

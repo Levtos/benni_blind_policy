@@ -33,6 +33,16 @@
       `packages/combined/rollo.yaml`) entfernen.
 - [ ] **Eltern-Profil:** `PROFILE_PREFILL[eltern]` befüllen, sobald Eltern-Anlage real.
 
+## Review-Punkte (beim Live-Test gezielt prüfen)
+
+- [ ] **Override-Reset-Ordering (R-MO):** `_prev_day_state` wird in `coordinator.py` von zwei
+      Stellen gelesen/geschrieben — `_reset_override_on_dayphase` (Vergleich) und
+      `_update_privacy_latch` (Fortschreiben), Reset bewusst VOR Latch-Update. Funktional
+      korrekt, aber subtil. Wenn ein Override nach Tagesphasen-Wechsel nicht löst → hier ansetzen.
+- [ ] **Window-Contract-Semantik:** R1 verlangt „Flügel offen (Status 2)", NICHT Kipp (Status 1).
+      Prüfen, ob `binary_sensor.opening_unsafe_for_rollo_combined` exakt das meint (Kipp ausschließt).
+      Falls nicht → tilt-ausschließendes Wing-Open-Combined in FLEET-54 anlegen (siehe dort).
+
 ## Child-Cards (Codex-Board)
 
 FLEET-56 Contracts/Bindings · 57 Engine/Debug · 58 Apply/Safety/Latch · 59 Override/Warden ·
