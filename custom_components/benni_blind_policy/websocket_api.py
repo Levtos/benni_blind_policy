@@ -16,11 +16,14 @@ from .const import (
     CONF_COVER_ENTITY,
     DATA_COORDINATOR,
     DOMAIN,
+    MANUAL_MODES,
     SOURCE_KEYS,
     WS_APPLY_NOW,
     WS_CLEAR_OVERRIDE,
     WS_GET_STATUS,
     WS_SET_APPLY_ENABLED,
+    WS_SET_MANUAL_DECISION,
+    WS_SET_MANUAL_POSITION,
     WS_SET_POSITION_PROFILE,
     WS_SET_PRIVACY_BED,
 )
@@ -66,6 +69,10 @@ def _status(hass: HomeAssistant, coord) -> dict[str, Any]:
         "privacy_bed": coord.privacy_bed_active,
         "alarm_wakeup": coord.alarm_wakeup_active,
         "manual_override": coord.manual_override_active,
+        "manual_explicit": coord.manual_explicit,
+        "manual_mode": coord.manual_mode,
+        "manual_target": coord.manual_target,
+        "manual_modes": list(MANUAL_MODES),
         "writing_active": coord.writing_active,
         "trace": [e.__dict__ for e in d.trace] if d else [],
         "position_profile": coord.position_profile,
@@ -165,8 +172,37 @@ def async_setup_websocket_api(hass: HomeAssistant) -> None:
         cleaned = await coord.async_set_position_profile(msg["position_profile"])
         connection.send_result(msg["id"], {"position_profile": cleaned})
 
+    @websocket_api.websocket_command({
+        vol.Required("type"): WS_SET_MANUAL_POSITION,
+        vol.Required("position"): vol.All(vol.Coerce(int), vol.Range(min=0, max=100)),
+    })
+    @websocket_api.require_admin
+    @websocket_api.async_response
+    async def ws_set_manual_position(hass, connection, msg) -> None:
+        coord = _coordinator(hass)
+        if coord is None:
+            connection.send_error(msg["id"], "not_ready", "Blind Policy not loaded")
+            return
+        await coord.async_set_manual_position(msg["position"])
+        connection.send_result(msg["id"], _status(hass, coord))
+
+    @websocket_api.websocket_command({
+        vol.Required("type"): WS_SET_MANUAL_DECISION,
+        vol.Required("mode"): vol.In(list(MANUAL_MODES)),
+    })
+    @websocket_api.require_admin
+    @websocket_api.async_response
+    async def ws_set_manual_decision(hass, connection, msg) -> None:
+        coord = _coordinator(hass)
+        if coord is None:
+            connection.send_error(msg["id"], "not_ready", "Blind Policy not loaded")
+            return
+        await coord.async_set_manual_decision(msg["mode"])
+        connection.send_result(msg["id"], _status(hass, coord))
+
     for cmd in (
         ws_get_status, ws_apply_now, ws_set_apply_enabled,
         ws_set_privacy_bed, ws_clear_override, ws_set_position_profile,
+        ws_set_manual_position, ws_set_manual_decision,
     ):
         websocket_api.async_register_command(hass, cmd)

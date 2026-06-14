@@ -269,3 +269,13 @@ WS_SET_PRIVACY_BED: Final = f"{DOMAIN}/set_privacy_bed"
 WS_CLEAR_OVERRIDE: Final = f"{DOMAIN}/clear_manual_override"
 WS_APPLY_NOW: Final = f"{DOMAIN}/apply_now"
 WS_SET_POSITION_PROFILE: Final = f"{DOMAIN}/set_position_profile"
+WS_SET_MANUAL_POSITION: Final = f"{DOMAIN}/set_manual_position"
+WS_SET_MANUAL_DECISION: Final = f"{DOMAIN}/set_manual_decision"
+
+# Modi, die im Panel manuell als Decision erzwingbar sind (window_open bleibt
+# absolut/safety-only, alarm_wakeup ist Platzhalter, open_weekday/-weekend sind
+# zeitgebundene Open-Duplikate → hier die positions-distinkten Modi).
+MANUAL_MODES: Final = (
+    MODE_OPEN, MODE_SLEEP, MODE_PRIVACY, MODE_PRIVACY_BED,
+    MODE_HEAT, MODE_GLARE_TV, MODE_GLARE_PC,
+)

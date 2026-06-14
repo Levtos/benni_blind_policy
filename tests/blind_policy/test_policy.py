@@ -400,3 +400,12 @@ def test_warden_sweep_clear():
 
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-v"]))
+
+
+def test_manual_modes_have_profile_positions():
+    """Jeder im Panel manuell wählbare Modus muss eine gültige Profil-Position
+    (0..100) liefern — schützt vor Tippfehlern in MANUAL_MODES."""
+    for mode in const.MANUAL_MODES:
+        assert mode in const.DEFAULT_POSITION_PROFILE, mode
+        pos = policy._position(mode, const.DEFAULT_POSITION_PROFILE)
+        assert pos is not None and 0 <= pos <= 100, (mode, pos)

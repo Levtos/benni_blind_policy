@@ -27,6 +27,9 @@ const RULE_LABEL = {
   R9: "glare_tv", R10: "glare_pc", R11: "open",
 };
 
+const PRESENCE_LABEL = { nicht_leer: "Anwesend", leer: "Niemand da" };
+const presenceLabel = (v) => PRESENCE_LABEL[v] || v || "—";
+
 const css = `
 :host { display:block; font-family: ui-sans-serif, system-ui, sans-serif;
   background:#1a1b26; color:#c0caf5; min-height:100vh; padding:18px 22px; box-sizing:border-box; }
@@ -60,8 +63,21 @@ button { background:#24283b; color:#c0caf5; border:1px solid #2a2e42; border-rad
   padding:7px 12px; font-size:12px; cursor:pointer; }
 button:hover { border-color:#7aa2f7; }
 button.warn { color:#f7768e; } button.go { color:#9ece6a; }
+button:disabled { opacity:.4; cursor:not-allowed; }
+button:disabled:hover { border-color:#2a2e42; }
+button.tiny { padding:3px 10px; font-size:11px; border-radius:999px; }
+button.tiny.on { background:#2d3a2e; border-color:#9ece6a55; color:#9ece6a; }
+button.tiny.off { background:#3a2d33; border-color:#f7768e55; color:#f7768e; }
 .err { color:#f7768e; padding:20px; }
 .mut { color:#565f89; font-size:11px; margin-top:6px; }
+.subrow { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:16px; }
+.subrow .sub { margin:0; }
+.manual { margin-top:12px; border-top:1px solid #2a2e42; padding-top:10px; display:flex; flex-direction:column; gap:8px; }
+.manual .line { display:flex; align-items:center; gap:8px; }
+.manual label { font-size:11px; color:#787c99; min-width:58px; }
+.manual input[type=range] { flex:1; accent-color:#7aa2f7; }
+.manual select { background:#24283b; color:#c0caf5; border:1px solid #2a2e42; border-radius:8px; padding:6px 8px; font-size:12px; flex:1; }
+.manual .val { width:44px; text-align:right; color:#7dcfff; font-size:12px; }
 `;
 
 class BbpApp extends HTMLElement {
@@ -122,7 +138,7 @@ class BbpApp extends HTMLElement {
       ["Außentemperatur", c.outdoor_temp != null ? c.outdoor_temp + " °C" : "—"],
       ["Bio-State", c.bio_state || "—"],
       ["Fenster offen", String(c.window_open)],
-      ["Haushalt", c.presence_household || "—"],
+      ["Haushalt", presenceLabel(c.presence_household)],
     ].map(([k, v]) => `<div class="row"><span class="k">${k}</span><span class="v">${v}</span></div>`).join("");
 
     const debug = JSON.stringify({
@@ -134,13 +150,16 @@ class BbpApp extends HTMLElement {
 
     this.shadowRoot.getElementById("root").outerHTML = `<div id="root">
       <h1>Blind Policy · ${s.profile || ""}</h1>
-      <div class="sub">Wohnzimmer-Rollo — Decision/Apply ${s.apply_enabled ? "scharf" : "Shadow (aus)"}</div>
+      <div class="subrow">
+        <div class="sub">Wohnzimmer-Rollo — ${s.apply_enabled ? "Automatik aktiv" : "Shadow (Automatik aus)"}</div>
+        <button class="tiny ${s.apply_enabled ? "on" : "off"}" id="toggle">Automatik: ${s.apply_enabled ? "an" : "aus"}</button>
+      </div>
 
       <div class="grid cols">
         <div class="card"><h2>Aktiver Modus</h2><div class="kpi mode">${MODE_LABEL[s.mode] || s.mode || "—"}</div></div>
         <div class="card"><h2>Zielposition</h2><div class="kpi">${pos != null ? pos + " %" : "—"}</div></div>
         <div class="card"><h2>Fensterstatus</h2><div class="kpi">${c.window_open ? "offen" : "geschlossen"}</div></div>
-        <div class="card"><h2>Haushalt</h2><div class="kpi">${c.presence_household || "—"}</div></div>
+        <div class="card"><h2>Haushalt</h2><div class="kpi">${presenceLabel(c.presence_household)}</div></div>
       </div>
 
       <div class="badges">
@@ -171,11 +190,26 @@ class BbpApp extends HTMLElement {
         <div class="card">
           <h2>Aktionen</h2>
           <div class="actions">
-            <button class="go" id="apply">Jetzt anwenden</button>
-            <button id="toggle">Apply ${s.apply_enabled ? "aus" : "an"}</button>
+            <button class="go" id="apply" ${s.apply_enabled ? "" : "disabled"} title="${s.apply_enabled ? "" : "Automatik ist aus — fährt nicht"}">Jetzt anwenden</button>
             <button id="bed">Privacy-Bett ${s.privacy_bed ? "aus" : "an"}</button>
-            <button class="warn" id="clr">Override löschen</button>
+            <button class="warn" id="clr" ${s.manual_override ? "" : "disabled"} title="${s.manual_override ? "" : "Kein Override aktiv"}">Override löschen</button>
           </div>
+          <div class="manual">
+            <div class="line">
+              <label>Manuell</label>
+              <input type="range" min="0" max="100" step="5" id="mpos" value="${s.manual_target ?? s.cover?.current_position ?? s.target_position ?? 100}">
+              <span class="val" id="mval">${s.manual_target ?? s.cover?.current_position ?? s.target_position ?? 100}%</span>
+              <button class="tiny" id="mgo">Fahren</button>
+            </div>
+            <div class="line">
+              <label>Modus</label>
+              <select id="mmode">${(s.manual_modes || []).map((m) => `<option value="${m}" ${s.manual_mode === m ? "selected" : ""}>${MODE_LABEL[m] || m} · ${(s.position_profile || {})[m] ?? "—"}%</option>`).join("")}</select>
+              <button class="tiny" id="mset">Setzen</button>
+            </div>
+          </div>
+          <div class="mut">${s.manual_explicit
+            ? `Manuell aktiv: ${s.manual_mode ? (MODE_LABEL[s.manual_mode] || s.manual_mode) : (s.manual_target + "%")} — „Override löschen" gibt an die Automatik zurück.`
+            : (s.apply_enabled ? "Automatik steuert das Rollo." : "Shadow: Automatik aus — nur der Manuell-Slider/Modus fährt.")}</div>
           <div class="mut">Blocker: ${(s.blockers || []).join(", ") || "keine"} · Apply erlaubt: ${s.apply_allowed}</div>
           <div class="mut">Cover: ${s.cover?.entity_id || "—"} @ ${s.cover?.current_position ?? "—"}%</div>
         </div>
@@ -183,10 +217,14 @@ class BbpApp extends HTMLElement {
     </div>`;
 
     const $ = (id) => this.shadowRoot.getElementById(id);
-    $("apply").onclick = () => this._call("benni_blind_policy/apply_now");
     $("toggle").onclick = () => this._call("benni_blind_policy/set_apply_enabled", { enabled: !s.apply_enabled });
+    $("apply").onclick = () => this._call("benni_blind_policy/apply_now");
     $("bed").onclick = () => this._call("benni_blind_policy/set_privacy_bed", { enabled: !s.privacy_bed });
     $("clr").onclick = () => this._call("benni_blind_policy/clear_manual_override");
+    const mpos = $("mpos"), mval = $("mval");
+    mpos.oninput = () => { mval.textContent = mpos.value + "%"; };
+    $("mgo").onclick = () => this._call("benni_blind_policy/set_manual_position", { position: Number(mpos.value) });
+    $("mset").onclick = () => this._call("benni_blind_policy/set_manual_decision", { mode: $("mmode").value });
   }
 }
 

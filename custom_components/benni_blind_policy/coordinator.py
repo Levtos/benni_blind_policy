@@ -106,6 +106,12 @@ class BlindPolicyCoordinator:
         self._alarm_wakeup = False
         self._manual_override = False
         self._override_set_ts: float | None = None      # monotonic
+        # Expliziter Manual-Override aus dem Panel (Position oder Modus). Hält bis
+        # Tagesphasenwechsel / Fenster-Safety / "Override löschen" — der 5-Min-
+        # Warden-Sweep räumt ihn NICHT (der ist nur für auto-erkannte Eingriffe).
+        self._manual_explicit = False
+        self._manual_mode: str | None = None
+        self._manual_target: int | None = None
         self._writing_active = False
         self._writing_off_ts: float | None = None        # monotonic (Race-Echo)
         self._writing_release_unsub: CALLBACK_TYPE | None = None
@@ -173,6 +179,18 @@ class BlindPolicyCoordinator:
     @property
     def manual_override_active(self) -> bool:
         return self._manual_override
+
+    @property
+    def manual_explicit(self) -> bool:
+        return self._manual_explicit
+
+    @property
+    def manual_mode(self) -> str | None:
+        return self._manual_mode
+
+    @property
+    def manual_target(self) -> int | None:
+        return self._manual_target
 
     @property
     def writing_active(self) -> bool:
@@ -275,6 +293,9 @@ class BlindPolicyCoordinator:
         self._privacy_bed = bool(raw.get("privacy_bed", False))
         self._alarm_wakeup = bool(raw.get("alarm_wakeup", False))
         self._manual_override = bool(raw.get("manual_override", False))
+        self._manual_explicit = bool(raw.get("manual_explicit", False))
+        self._manual_mode = raw.get("manual_mode")
+        self._manual_target = raw.get("manual_target")
         if self._manual_override:
             self._override_set_ts = time.monotonic()
         self._prev_day_state = raw.get("prev_day_state")
@@ -287,6 +308,9 @@ class BlindPolicyCoordinator:
             "privacy_bed": self._privacy_bed,
             "alarm_wakeup": self._alarm_wakeup,
             "manual_override": self._manual_override,
+            "manual_explicit": self._manual_explicit,
+            "manual_mode": self._manual_mode,
+            "manual_target": self._manual_target,
             "prev_day_state": self._prev_day_state,
             "prev_bio": self._prev_bio,
             "last_decision": self._last_decision.as_dict() if self._last_decision else None,
@@ -399,6 +423,8 @@ class BlindPolicyCoordinator:
 
     def _warden_sweep(self) -> None:
         """Periodischer Sweep (Alter>5min via Prädikat gegated)."""
+        if self._manual_explicit:
+            return  # expliziter Panel-Override hält bis Tagesphase/Fenster/Clear
         if not self._manual_override or self._override_set_ts is None:
             return
         age = time.monotonic() - self._override_set_ts
@@ -423,8 +449,15 @@ class BlindPolicyCoordinator:
             and self._prev_day_state is not None
             and ctx.day_state != self._prev_day_state
         ):
-            self._manual_override = False
-            self._override_set_ts = None
+            self._clear_manual_state()
+
+    def _clear_manual_state(self) -> None:
+        """Override + expliziten Manual-Ziel-State zurücksetzen (Auto übernimmt wieder)."""
+        self._manual_override = False
+        self._override_set_ts = None
+        self._manual_explicit = False
+        self._manual_mode = None
+        self._manual_target = None
 
     # ----- evaluation -----
     async def async_evaluate(self) -> policy.Decision:
@@ -454,10 +487,9 @@ class BlindPolicyCoordinator:
             manual_override_active=self._manual_override,
         )
 
-        # R1 absolut: window_open darf einen Override löschen.
+        # R1 absolut: window_open darf einen Override löschen (auch expliziten).
         if decision.manual_override_cleared:
-            self._manual_override = False
-            self._override_set_ts = None
+            self._clear_manual_state()
 
         self._last_decision = decision
 
@@ -547,8 +579,32 @@ class BlindPolicyCoordinator:
         await self.async_evaluate()
 
     async def async_clear_manual_override(self) -> None:
-        self._manual_override = False
-        self._override_set_ts = None
+        self._clear_manual_state()
+        await self.async_evaluate()
+
+    async def async_set_manual_position(self, position: int) -> None:
+        """Panel: Rollo manuell auf x % fahren + Override halten (auch im Shadow)."""
+        pos = max(0, min(100, int(position)))
+        self._manual_override = True
+        self._manual_explicit = True
+        self._manual_mode = None
+        self._manual_target = pos
+        self._override_set_ts = time.monotonic()
+        await self._apply(pos)          # direkter Fahrbefehl, unabhängig vom apply_enabled-Gate
+        await self.async_evaluate()
+
+    async def async_set_manual_decision(self, mode: str) -> None:
+        """Panel: Policy manuell auf einen Modus zwingen (Position aus dem Profil)."""
+        if mode not in DEFAULT_POSITION_PROFILE:
+            return
+        pos = policy._position(mode, self.position_profile)
+        self._manual_override = True
+        self._manual_explicit = True
+        self._manual_mode = mode
+        self._manual_target = pos
+        self._override_set_ts = time.monotonic()
+        if pos is not None:
+            await self._apply(pos)
         await self.async_evaluate()
 
     async def async_set_manual_override(self, value: bool) -> None:
