@@ -30,6 +30,28 @@ const RULE_LABEL = {
 const PRESENCE_LABEL = { nicht_leer: "Anwesend", leer: "Niemand da" };
 const presenceLabel = (v) => PRESENCE_LABEL[v] || v || "—";
 
+const hhmm = (m) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+const fmtK = (n) => (n % 1000 === 0 ? `${n / 1000}k` : `${(n / 1000).toFixed(1)}k`);
+
+/** Kurz-Bedingung je Regel ("ab wann greift sie"), parametriert mit den Live-Schwellen. */
+function ruleConditions(thr = {}) {
+  const { gate_open_lux: go, gate_sun_min_deg: gs, heat_temp_c: ht, heat_sun_min_deg: hs,
+    privacy_latch_lux: pl, open_weekday_min_minutes: wd, open_weekend_min_minutes: we } = thr;
+  return {
+    R1: "Fenster offen — absolut (Safety)",
+    R2: "Privacy-Bett-Schalter an",
+    R3: `Haushalt leer ODER Privacy-Latch (Latch abends < ${pl ?? "?"} lx)`,
+    R4: "Wecker-Schalter an",
+    R5: `late_morning + Werktag + ab ${wd != null ? hhmm(wd) : "?"}`,
+    R6: `forenoon + Wochenende/frei + ab ${we != null ? hhmm(we) : "?"}`,
+    R7: "Bio = sleep ODER Nachtphase",
+    R8: `sunny + ≥ ${ht ?? "?"} °C + Sonne > ${hs ?? "?"}° + vormittags`,
+    R9: `Lux-Gate an (> ${go != null ? fmtK(go) : "?"} lx) + TV/Streaming/Gaming + nicht PC`,
+    R10: `Lux-Gate an (> ${go != null ? fmtK(go) : "?"} lx) + Gaming am PC`,
+    R11: "Fallback — trifft immer zu",
+  };
+}
+
 const css = `
 :host { display:block; font-family: ui-sans-serif, system-ui, sans-serif;
   background:#1a1b26; color:#c0caf5; min-height:100vh; padding:18px 22px; box-sizing:border-box; }
@@ -41,8 +63,10 @@ h1 { font-size:18px; margin:0 0 2px; color:#bb9af7; }
 .card h2 { font-size:13px; margin:0 0 10px; color:#7aa2f7; text-transform:uppercase; letter-spacing:.04em; }
 .kpi { font-size:24px; font-weight:600; color:#7dcfff; }
 .kpi.mode { color:#bb9af7; }
-.row { display:flex; justify-content:space-between; padding:3px 0; font-size:13px; border-bottom:1px solid #20243450; }
-.row .k { color:#787c99; } .row .v { color:#c0caf5; }
+.row { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; padding:4px 0; font-size:13px; border-bottom:1px solid #20243450; }
+.row .k { color:#787c99; padding-top:1px; } .row .v { color:#c0caf5; }
+.row .vwrap { display:flex; flex-direction:column; align-items:flex-end; gap:1px; }
+.row .hint { font-size:10px; color:#565f89; text-align:right; line-height:1.2; }
 .badges { display:flex; flex-wrap:wrap; gap:8px; margin:10px 0 18px; }
 .badge { font-size:12px; padding:4px 10px; border-radius:999px; background:#24283b; border:1px solid #2a2e42; }
 .badge.on { background:#2d3a2e; border-color:#9ece6a55; color:#9ece6a; }
@@ -54,7 +78,11 @@ h1 { font-size:18px; margin:0 0 2px; color:#bb9af7; }
 .trace .t.skip { opacity:.45; }
 .dot { width:9px; height:9px; border-radius:50%; background:#414868; flex:0 0 auto; }
 .dot.true { background:#9ece6a; } .dot.win { background:#9ece6a; box-shadow:0 0 0 3px #9ece6a33; }
-.trace .rid { width:34px; color:#565f89; } .trace .nm { flex:1; }
+.trace .t { align-items:flex-start; }
+.trace .rid { width:34px; color:#565f89; padding-top:1px; }
+.trace .nmwrap { flex:1; display:flex; flex-direction:column; gap:1px; }
+.trace .nm { color:#c0caf5; }
+.trace .cond { font-size:10px; color:#565f89; line-height:1.25; }
 .trace .res { font-size:12px; } .trace .res.true { color:#9ece6a; } .trace .res.false { color:#f7768e; }
 .trace .pos { width:48px; text-align:right; color:#787c99; }
 pre { background:#16161e; border-radius:10px; padding:12px; overflow:auto; font-size:12px; color:#a9b1d6; margin:0; }
@@ -115,31 +143,38 @@ class BbpApp extends HTMLElement {
     const c = s.context || {};
     const pos = s.target_position;
     const winRule = (s.trace || []).find((e) => e.matched);
+    const cond = ruleConditions(s.thresholds);
     const trace = (s.trace || []).map((e) => {
       const isWin = winRule && e.rule === winRule.rule;
       const afterWin = winRule && Number(e.rule.slice(1)) > Number(winRule.rule.slice(1));
       return `<div class="t ${isWin ? "win" : ""} ${afterWin ? "skip" : ""}">
         <span class="dot ${isWin ? "win" : e.matched ? "true" : ""}"></span>
         <span class="rid">${e.rule}</span>
-        <span class="nm">${RULE_LABEL[e.rule] || e.mode}</span>
+        <div class="nmwrap"><span class="nm">${RULE_LABEL[e.rule] || e.mode}</span><span class="cond">${cond[e.rule] || ""}</span></div>
         <span class="res ${e.matched ? "true" : "false"}">${afterWin ? "skip" : e.matched}</span>
         <span class="pos">${e.position != null ? e.position + "%" : "—"}</span>
       </div>`;
     }).join("");
 
+    const thr = s.thresholds || {};
     const inputs = [
-      ["Außenhelligkeit", c.lux != null ? c.lux + " lx" : "—"],
-      ["Day State", c.day_state || "—"],
-      ["Day Context", c.day_context || "—"],
-      ["Media Scenario", c.media_scenario || "—"],
-      ["Gaming Source", c.gaming_source || "—"],
-      ["Sonnenhöhe", c.sun_elevation != null ? c.sun_elevation + "°" : "—"],
-      ["Wetterlage", c.weather_condition || "—"],
-      ["Außentemperatur", c.outdoor_temp != null ? c.outdoor_temp + " °C" : "—"],
-      ["Bio-State", c.bio_state || "—"],
-      ["Fenster offen", String(c.window_open)],
-      ["Haushalt", presenceLabel(c.presence_household)],
-    ].map(([k, v]) => `<div class="row"><span class="k">${k}</span><span class="v">${v}</span></div>`).join("");
+      ["Außenhelligkeit", c.lux != null ? c.lux + " lx" : "—",
+        thr.gate_open_lux ? `Lux-Gate: > ${fmtK(thr.gate_open_lux)} auf / < ${fmtK(thr.gate_close_lux)} zu` : ""],
+      ["Day State", c.day_state || "—", ""],
+      ["Day Context", c.day_context || "—", ""],
+      ["Media Scenario", c.media_scenario || "—", "TV/Streaming/Gaming → Glare (mit Lux-Gate)"],
+      ["Gaming Source", c.gaming_source || "—", "pc → glare_pc, sonst glare_tv"],
+      ["Sonnenhöhe", c.sun_elevation != null ? c.sun_elevation + "°" : "—",
+        thr.gate_sun_min_deg ? `> ${thr.gate_sun_min_deg}° für Gate & Heat` : ""],
+      ["Wetterlage", c.weather_condition || "—", "sunny nötig für Heat"],
+      ["Außentemperatur", c.outdoor_temp != null ? c.outdoor_temp + " °C" : "—",
+        thr.heat_temp_c ? `Heat ab ≥ ${thr.heat_temp_c} °C` : ""],
+      ["Bio-State", c.bio_state || "—", ""],
+      ["Fenster offen", String(c.window_open), "true → R1 absolut"],
+      ["Haushalt", presenceLabel(c.presence_household), "leer → privacy (R3)"],
+    ].map(([label, v, hint]) =>
+      `<div class="row"><span class="k">${label}</span><span class="vwrap"><span class="v">${v}</span>${hint ? `<span class="hint">${hint}</span>` : ""}</span></div>`
+    ).join("");
 
     const debug = JSON.stringify({
       profile: s.profile, mode: s.mode, position: pos, reason: s.reason,
