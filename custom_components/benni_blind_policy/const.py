@@ -19,7 +19,7 @@ MODULE_ID: Final[str] = "blind_policy"
 NAME: Final[str] = "Blind Policy"
 
 STORAGE_VERSION: Final[int] = 1
-CONFIG_ENTRY_VERSION: Final[int] = 2
+CONFIG_ENTRY_VERSION: Final[int] = 3
 
 # Datenwurzel in hass.data[DOMAIN].
 DATA_COORDINATOR: Final[str] = "coordinator"

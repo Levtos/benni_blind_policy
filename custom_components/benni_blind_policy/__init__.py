@@ -51,6 +51,11 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    changed, data, options = migrate_source_ids(entry.data, entry.options)
+    if changed:
+        hass.config_entries.async_update_entry(entry, data=data, options=options)
+        _LOGGER.info("Migrated benni_blind_policy source bindings during setup")
+
     coord = BlindPolicyCoordinator(hass, entry)
     await coord.async_load()
     coord.async_start()
