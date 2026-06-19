@@ -122,10 +122,16 @@ class BbpApp extends HTMLElement {
     if (!this._hass) return;
     try {
       this._status = await this._hass.callWS({ type: "benni_blind_policy/get_status" });
-      this._render();
     } catch (e) {
       this.shadowRoot.getElementById("root").innerHTML =
         `<div class="err">Blind Policy nicht geladen oder keine Berechtigung.<br>${e.message || e}</div>`;
+      return;
+    }
+    try {
+      this._render();
+    } catch (e) {
+      this.shadowRoot.getElementById("root").innerHTML =
+        `<div class="err">Render-Fehler im Panel.<br>${e.message || e}</div>`;
     }
   }
 
@@ -183,7 +189,9 @@ class BbpApp extends HTMLElement {
       writing_active: s.writing_active, cover: s.cover,
     }, null, 2);
 
-    this.shadowRoot.getElementById("root").outerHTML = `<div id="root">
+    const root = this.shadowRoot.getElementById("root");
+    root.className = "";
+    root.innerHTML = `
       <h1>Blind Policy · ${s.profile || ""}</h1>
       <div class="subrow">
         <div class="sub">Wohnzimmer-Rollo — ${s.apply_enabled ? "Automatik aktiv" : "Shadow (Automatik aus)"}</div>
@@ -248,8 +256,7 @@ class BbpApp extends HTMLElement {
           <div class="mut">Blocker: ${(s.blockers || []).join(", ") || "keine"} · Apply erlaubt: ${s.apply_allowed}</div>
           <div class="mut">Cover: ${s.cover?.entity_id || "—"} @ ${s.cover?.current_position ?? "—"}%</div>
         </div>
-      </div>
-    </div>`;
+      </div>`;
 
     const $ = (id) => this.shadowRoot.getElementById(id);
     $("toggle").onclick = () => this._call("benni_blind_policy/set_apply_enabled", { enabled: !s.apply_enabled });
