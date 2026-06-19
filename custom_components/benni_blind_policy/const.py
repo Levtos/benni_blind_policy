@@ -133,7 +133,9 @@ GATE_DAY_STATES: Final = frozenset(
 
 HEAT_TEMP_C: Final = 24               # Temperaturklasse ≥ 12 ≙ ≥ 24 °C
 HEAT_SUN_MIN_DEG: Final = 5           # Heat Sonnenhöhe > 5°
-HEAT_DAY_STATES: Final = frozenset({PHASE_LATE_MORNING, PHASE_FORENOON})
+HEAT_DAY_STATES: Final = frozenset(
+    {PHASE_LATE_MORNING, PHASE_FORENOON, PHASE_AFTERNOON, PHASE_EARLY_EVENING}
+)
 
 PRIVACY_LATCH_LUX: Final = 400        # Latch-Set < 400 lx während late_evening
 

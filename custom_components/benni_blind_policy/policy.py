@@ -93,9 +93,9 @@ class Context:
     gaming_source: str | None = None         # tv / pc / none
     lux: float | None = None                 # Außenhelligkeit
     sun_elevation: float | None = None       # Sonnenhöhe °
-    weather_condition: str | None = None     # roh (sunny/rainy/…) — R8 in-policy
+    weather_condition: str | None = None     # roh (sunny/rainy/…) — Heat in-policy
     outdoor_temp: float | None = None        # °C; ≥ HEAT_TEMP_C ≙ Temperaturklasse ≥ 12
-    now_minutes: int | None = None           # Minuten seit Mitternacht (für R5/R6)
+    now_minutes: int | None = None           # Minuten seit Mitternacht (für Open-Regeln)
 
 
 @dataclass
@@ -211,7 +211,7 @@ def lux_gate(
 # Prioritätskette (Lastenheft §4.1 / §5)
 # --------------------------------------------------------------------------- #
 def _heat_active(n: _Norm) -> bool:
-    """R8 — direkter Sonnenschutz, in-policy aus Rohdaten (kein Lux-Gate)."""
+    """Direkter Sonnenschutz, in-policy aus Rohdaten (kein Lux-Gate)."""
     return (
         n.weather_condition == WEATHER_SUNNY
         and n.outdoor_temp is not None
@@ -219,12 +219,11 @@ def _heat_active(n: _Norm) -> bool:
         and n.sun_elevation is not None
         and n.sun_elevation > HEAT_SUN_MIN_DEG
         and n.day_state in HEAT_DAY_STATES
-        and n.bio_state != BIO_SLEEP
     )
 
 
 def _sleep_active(n: _Norm) -> bool:
-    """R7 — Bio sleep, Nachtphasen, oder early_morning+sleep. `waking` zählt nicht."""
+    """Bio sleep, Nachtphasen, oder early_morning+sleep. `waking` zählt nicht."""
     return (
         n.bio_state == BIO_SLEEP
         or n.day_state in (PHASE_EARLY_NIGHT, PHASE_LATE_NIGHT)
@@ -246,16 +245,16 @@ def evaluate_chain(n: _Norm, gate_on: bool) -> tuple[RuleEval, list[RuleEval]]:
         ("R2", MODE_PRIVACY_BED, n.privacy_bed),
         ("R3", MODE_PRIVACY, n.presence_household == HOUSEHOLD_EMPTY or n.privacy_latch),
         ("R4", MODE_ALARM_WAKEUP, n.alarm_wakeup),
-        ("R5", MODE_OPEN_WEEKDAY,
+        ("R5", MODE_HEAT, _heat_active(n)),
+        ("R6", MODE_OPEN_WEEKDAY,
          n.day_state == PHASE_LATE_MORNING
          and n.day_context == DAY_CONTEXT_WERKTAG
          and nm is not None and nm >= OPEN_WEEKDAY_MIN_MINUTES),
-        ("R6", MODE_OPEN_WEEKEND,
+        ("R7", MODE_OPEN_WEEKEND,
          n.day_state == PHASE_FORENOON
          and n.day_context in (DAY_CONTEXT_WOCHENENDE, DAY_CONTEXT_FREI)
          and nm is not None and nm >= OPEN_WEEKEND_MIN_MINUTES),
-        ("R7", MODE_SLEEP, _sleep_active(n)),
-        ("R8", MODE_HEAT, _heat_active(n)),
+        ("R8", MODE_SLEEP, _sleep_active(n)),
         ("R9", MODE_GLARE_TV,
          gate_on
          and n.media_scenario in TV_GLARE_SCENARIOS

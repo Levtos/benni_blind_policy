@@ -23,7 +23,7 @@ const MODE_LABEL = {
 
 const RULE_LABEL = {
   R1: "window_open", R2: "privacy_bed", R3: "privacy", R4: "alarm_wakeup",
-  R5: "open_weekday", R6: "open_weekend", R7: "sleep", R8: "heat",
+  R5: "heat", R6: "open_weekday", R7: "open_weekend", R8: "sleep",
   R9: "glare_tv", R10: "glare_pc", R11: "open",
 };
 
@@ -42,10 +42,10 @@ function ruleConditions(thr = {}) {
     R2: "Privacy-Bett-Schalter an",
     R3: `Haushalt leer ODER Privacy-Latch (Latch abends < ${pl ?? "?"} lx)`,
     R4: "Wecker-Schalter an",
-    R5: `late_morning + Werktag + ab ${wd != null ? hhmm(wd) : "?"}`,
-    R6: `forenoon + Wochenende/frei + ab ${we != null ? hhmm(we) : "?"}`,
-    R7: "Bio = sleep ODER Nachtphase",
-    R8: `sunny + ≥ ${ht ?? "?"} °C + Sonne > ${hs ?? "?"}° + vormittags`,
+    R5: `sunny + ≥ ${ht ?? "?"} °C + Sonne > ${hs ?? "?"}° + late_morning bis early_evening`,
+    R6: `late_morning + Werktag + ab ${wd != null ? hhmm(wd) : "?"}`,
+    R7: `forenoon + Wochenende/frei + ab ${we != null ? hhmm(we) : "?"}`,
+    R8: "Bio = sleep ODER Nachtphase",
     R9: `Lux-Gate an (> ${go != null ? fmtK(go) : "?"} lx) + TV/Streaming/Gaming + nicht PC`,
     R10: `Lux-Gate an (> ${go != null ? fmtK(go) : "?"} lx) + Gaming am PC`,
     R11: "Fallback — trifft immer zu",

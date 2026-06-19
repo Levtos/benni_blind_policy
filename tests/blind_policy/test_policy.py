@@ -178,13 +178,41 @@ def test_waking_treated_like_awake_not_sleep():
 
 
 # --------------------------------------------------------------------------- #
-# R8 — Heat (in-policy, kein Lux-Gate)
+# Heat (in-policy, kein Lux-Gate)
 # --------------------------------------------------------------------------- #
 def test_heat_active():
     d = decide(ctx(day_state=const.PHASE_FORENOON, weather_condition="sunny",
                    outdoor_temp=25, sun_elevation=20))
     assert d.mode == const.MODE_HEAT
     assert d.target_position == 45
+
+
+@pytest.mark.parametrize("day_state", [
+    const.PHASE_LATE_MORNING,
+    const.PHASE_FORENOON,
+    const.PHASE_AFTERNOON,
+    const.PHASE_EARLY_EVENING,
+])
+def test_heat_active_from_late_morning_to_early_evening(day_state):
+    d = decide(ctx(day_state=day_state, weather_condition="sunny",
+                   outdoor_temp=25, sun_elevation=20))
+    assert d.mode == const.MODE_HEAT
+
+
+def test_heat_beats_open_weekday():
+    d = decide(ctx(day_state=const.PHASE_LATE_MORNING,
+                   day_context=const.DAY_CONTEXT_WERKTAG,
+                   now_minutes=8 * 60,
+                   weather_condition="sunny", outdoor_temp=25, sun_elevation=20))
+    assert d.mode == const.MODE_HEAT
+
+
+def test_heat_beats_open_weekend():
+    d = decide(ctx(day_state=const.PHASE_FORENOON,
+                   day_context=const.DAY_CONTEXT_WOCHENENDE,
+                   now_minutes=10 * 60,
+                   weather_condition="sunny", outdoor_temp=25, sun_elevation=20))
+    assert d.mode == const.MODE_HEAT
 
 
 def test_heat_needs_sunny():
@@ -205,17 +233,17 @@ def test_heat_needs_sun_above_5():
     assert d.mode != const.MODE_HEAT
 
 
-def test_heat_not_in_afternoon():
-    d = decide(ctx(day_state=const.PHASE_AFTERNOON, weather_condition="sunny",
+def test_heat_not_in_late_evening():
+    d = decide(ctx(day_state=const.PHASE_LATE_EVENING, weather_condition="sunny",
                    outdoor_temp=25, sun_elevation=20))
     assert d.mode != const.MODE_HEAT
 
 
-def test_heat_not_when_sleep():
+def test_heat_beats_daytime_sleep():
     d = decide(ctx(day_state=const.PHASE_FORENOON, weather_condition="sunny",
                    outdoor_temp=25, sun_elevation=20, bio_state=const.BIO_SLEEP))
-    # sleep (R7) hat höhere Priorität als heat (R8)
-    assert d.mode == const.MODE_SLEEP
+    # Heat ist tagsüber Sonnenschutz; Nachtphasen bleiben durch das Day-State-Fenster geschützt.
+    assert d.mode == const.MODE_HEAT
 
 
 # --------------------------------------------------------------------------- #
