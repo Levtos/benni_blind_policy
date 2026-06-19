@@ -172,6 +172,8 @@ CONF_OUTDOOR_TEMP: Final = "outdoor_temp_entity"            # R8 (≥ 24 °C)
 
 LEGACY_WINDOW_OPEN_ENTITY: Final = "binary_sensor.opening_unsafe_for_rollo_combined"
 CORE_WINDOW_OPEN_ENTITY: Final = "sensor.benni_combined_opening_unsafe_for_rollo"
+CORE_OPENINGS_MASTER_ENTITY: Final = "sensor.benni_combined_openings"
+CORE_WINDOW_OPEN_ATTRIBUTE: Final = "living"
 
 # Options.
 CONF_APPLY_ENABLED: Final = "apply_enabled"
@@ -188,12 +190,12 @@ DEFAULT_STARTUP_BLOCK_SECONDS: Final = 15
 # Heat-Contract: weather_condition (DWD, sunny) + outdoor_temp (DWD, °C, ≥24) +
 # sun (Elevation) — in-policy kategorisiert (keine Wetterkategorie-/Temperaturklasse-
 # Entity vorhanden; FLEET-16-Owner dieser Ableitung ist diese Policy).
-# Window: opening_unsafe_for_rollo Combined ist die canonical Aggregation (core_devices).
+# Window: openings master exposes per-room enum; living == open blocks this blind.
 # --------------------------------------------------------------------------- #
 PROFILE_PREFILL: Final[dict[str, dict[str, str]]] = {
     PROFILE_BENNI: {
         CONF_COVER_ENTITY: "cover.living_blackout_blind",
-        CONF_WINDOW_OPEN: CORE_WINDOW_OPEN_ENTITY,
+        CONF_WINDOW_OPEN: CORE_OPENINGS_MASTER_ENTITY,
         CONF_BIO_STATE: "sensor.benni_core_state_bio_state",
         CONF_DAY_STATE: "sensor.benni_core_state_day_state",
         CONF_DAY_CONTEXT: "sensor.benni_core_state_day_context",

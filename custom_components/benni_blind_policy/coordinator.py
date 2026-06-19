@@ -52,6 +52,8 @@ from .const import (
     CONF_SUN,
     CONF_WEATHER_CONDITION,
     CONF_WINDOW_OPEN,
+    CORE_OPENINGS_MASTER_ENTITY,
+    CORE_WINDOW_OPEN_ATTRIBUTE,
     DATA_SKIP_RELOAD_COUNT,
     DEFAULT_APPLY_ENABLED,
     DEFAULT_POSITION_PROFILE,
@@ -323,6 +325,11 @@ class BlindPolicyCoordinator:
             return None
         st = self.hass.states.get(eid)
         if st is None or st.state in ("unknown", "unavailable"):
+            return None
+        if key == CONF_WINDOW_OPEN and eid == CORE_OPENINGS_MASTER_ENTITY:
+            value = st.attributes.get(CORE_WINDOW_OPEN_ATTRIBUTE)
+            if value in ("closed", "open", "tilted"):
+                return "on" if value == "open" else "off"
             return None
         return st.state
 
