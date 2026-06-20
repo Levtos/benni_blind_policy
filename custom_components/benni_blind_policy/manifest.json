@@ -1,7 +1,7 @@
 {
   "domain": "benni_blind_policy",
   "name": "Benni Blind Policy",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "documentation": "https://github.com/Levtos/benni_blind_policy",
   "issue_tracker": "https://github.com/Levtos/benni_blind_policy/issues",
   "codeowners": ["@Levtos"],

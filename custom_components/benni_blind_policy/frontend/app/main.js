@@ -56,6 +56,10 @@ const css = `
 :host { display:block; font-family: ui-sans-serif, system-ui, sans-serif;
   background:#1a1b26; color:#c0caf5; min-height:100vh; padding:18px 22px; box-sizing:border-box; }
 h1 { font-size:18px; margin:0 0 2px; color:#bb9af7; }
+.topbar { display:flex; align-items:center; gap:10px; }
+.menu { display:none; align-items:center; justify-content:center; flex:0 0 auto;
+  width:38px; height:38px; padding:0; font-size:20px; line-height:1; border-radius:10px; }
+@media (max-width: 870px) { .menu { display:inline-flex; } }
 .sub { color:#565f89; font-size:12px; margin-bottom:16px; }
 .grid { display:grid; gap:14px; }
 .cols { grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
@@ -192,7 +196,10 @@ class BbpApp extends HTMLElement {
     const root = this.shadowRoot.getElementById("root");
     root.className = "";
     root.innerHTML = `
-      <h1>Blind Policy · ${s.profile || ""}</h1>
+      <div class="topbar">
+        <button class="menu" id="menu" title="Menü / Sidebar">☰</button>
+        <h1>Blind Policy · ${s.profile || ""}</h1>
+      </div>
       <div class="subrow">
         <div class="sub">Wohnzimmer-Rollo — ${s.apply_enabled ? "Automatik aktiv" : "Shadow (Automatik aus)"}</div>
         <button class="tiny ${s.apply_enabled ? "on" : "off"}" id="toggle">Automatik: ${s.apply_enabled ? "an" : "aus"}</button>
@@ -259,6 +266,8 @@ class BbpApp extends HTMLElement {
       </div>`;
 
     const $ = (id) => this.shadowRoot.getElementById(id);
+    $("menu").onclick = () =>
+      this.dispatchEvent(new CustomEvent("hass-toggle-menu", { bubbles: true, composed: true }));
     $("toggle").onclick = () => this._call("benni_blind_policy/set_apply_enabled", { enabled: !s.apply_enabled });
     $("apply").onclick = () => this._call("benni_blind_policy/apply_now");
     $("bed").onclick = () => this._call("benni_blind_policy/set_privacy_bed", { enabled: !s.privacy_bed });
