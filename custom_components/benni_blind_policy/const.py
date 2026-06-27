@@ -193,9 +193,12 @@ DEFAULT_INVERT_POSITION: Final = False               # Richtung normal (logisch 
 # --------------------------------------------------------------------------- #
 # Per-Profil-Prefill: bekannte Live-IDs je Route (greift nur, WENN Entity existiert).
 # Benni-Anlage (einhornzentrale) via HA-MCP ermittelt. "eltern" bewusst leer.
-# Heat-Contract: weather_condition (DWD, sunny) + outdoor_temp (DWD, °C, ≥24) +
-# sun (Elevation) — in-policy kategorisiert (keine Wetterkategorie-/Temperaturklasse-
-# Entity vorhanden; FLEET-16-Owner dieser Ableitung ist diese Policy).
+# Heat-Contract: weather_condition (DWD, sunny) + outdoor_temp (LOKAL, core_devices
+# effective outdoor, °C, ≥24) + sun (Elevation) — in-policy kategorisiert (keine
+# Wetterkategorie-/Temperaturklasse-Entity vorhanden; FLEET-16-Owner dieser Ableitung
+# ist diese Policy). User 2026-06-27: outdoor_temp von DWD-Prognose (zu träge, lag
+# 3 °C unter real) auf die lokale core_devices-Aggregation umgestellt; condition bleibt
+# DWD (lokal gibt es keine sunny/cloudy-Lage).
 # Window: openings master exposes per-room enum; living == open blocks this blind.
 # --------------------------------------------------------------------------- #
 PROFILE_PREFILL: Final[dict[str, dict[str, str]]] = {
@@ -211,7 +214,7 @@ PROFILE_PREFILL: Final[dict[str, dict[str, str]]] = {
         CONF_MEDIA_SCENARIO: "sensor.benni_media_state_media_context",
         CONF_GAMING_SOURCE: "sensor.benni_media_state_gaming_source",
         CONF_WEATHER_CONDITION: "sensor.benni_device_weather_condition",
-        CONF_OUTDOOR_TEMP: "sensor.benni_device_weather_temperature",
+        CONF_OUTDOOR_TEMP: "sensor.benni_combined_climate_effective_outdoor_temperature",
     },
     PROFILE_ELTERN: {},
 }
