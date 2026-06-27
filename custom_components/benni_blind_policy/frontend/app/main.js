@@ -148,8 +148,17 @@ class BbpApp extends HTMLElement {
   }
   disconnectedCallback() { clearInterval(this._timer); this._timer = null; }
 
+  // Refresh-Schutz: True, solange der User in einem Eingabefeld (Zielwert/Slider/
+  // Dropdown) tippt — dann darf der 3s-Poll NICHT neu rendern, sonst geht die
+  // laufende Eingabe verloren.
+  _isEditing() {
+    const ae = this.shadowRoot && this.shadowRoot.activeElement;
+    return !!ae && (ae.tagName === "INPUT" || ae.tagName === "SELECT");
+  }
+
   async _tick() {
     if (!this._hass) return;
+    if (this._isEditing()) return;
     try {
       this._status = await this._hass.callWS({ type: "benni_blind_policy/get_status" });
     } catch (e) {
@@ -157,6 +166,7 @@ class BbpApp extends HTMLElement {
         `<div class="err">Blind Policy nicht geladen oder keine Berechtigung.<br>${e.message || e}</div>`;
       return;
     }
+    if (this._isEditing()) return;  // Fokus kam während des await — Render überspringen.
     try {
       this._render();
     } catch (e) {
