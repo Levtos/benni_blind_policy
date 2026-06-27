@@ -85,6 +85,14 @@ DEFAULT_POSITION_PROFILE: Final[dict[str, int]] = {
     MODE_OPEN: 100,
 }
 
+# Zweites, UNABHÄNGIGES Profil für die invertierte Achse (Schalter wählt, welches
+# Profil aktiv ist — kein 100−x-Mirror mehr am Apply). Default = gespiegeltes
+# Normal-Profil, damit die Out-of-Box-/Live-Verhalten unverändert bleiben; jeder
+# Wert ist frei editierbar (z. B. sleep 40/40 statt 40/60).
+DEFAULT_POSITION_PROFILE_INVERTED: Final[dict[str, int]] = {
+    mode: 100 - pos for mode, pos in DEFAULT_POSITION_PROFILE.items()
+}
+
 # --------------------------------------------------------------------------- #
 # Eingangs-Wertebereiche (konsumiert aus core_state / media_state / DWD)
 # --------------------------------------------------------------------------- #
@@ -182,8 +190,9 @@ CORE_WINDOW_OPEN_ATTRIBUTE: Final = "living"
 # Options.
 CONF_APPLY_ENABLED: Final = "apply_enabled"
 CONF_STARTUP_BLOCK_SECONDS: Final = "startup_block_seconds"
-CONF_POSITION_PROFILE: Final = "position_profile"    # dict mode -> position
-CONF_INVERT_POSITION: Final = "invert_position"      # True = Cover-Achse gespiegelt (0↔100)
+CONF_POSITION_PROFILE: Final = "position_profile"    # dict mode -> position (Normal-Achse)
+CONF_POSITION_PROFILE_INVERTED: Final = "position_profile_inverted"  # dict mode -> position (Invert-Achse)
+CONF_INVERT_POSITION: Final = "invert_position"      # True = invertiertes Profil aktiv
 
 # Defaults.
 DEFAULT_APPLY_ENABLED: Final = False                 # Shadow-safe out of the box
@@ -285,6 +294,7 @@ WS_SET_POSITION_PROFILE: Final = f"{DOMAIN}/set_position_profile"
 WS_SET_MANUAL_POSITION: Final = f"{DOMAIN}/set_manual_position"
 WS_SET_MANUAL_DECISION: Final = f"{DOMAIN}/set_manual_decision"
 WS_SET_INVERT_POSITION: Final = f"{DOMAIN}/set_invert_position"
+WS_RESET_POSITION_PROFILE: Final = f"{DOMAIN}/reset_position_profile"
 
 # Modi, die im Panel manuell als Decision erzwingbar sind (window_open bleibt
 # absolut/safety-only, alarm_wakeup ist Platzhalter, open_weekday/-weekend sind

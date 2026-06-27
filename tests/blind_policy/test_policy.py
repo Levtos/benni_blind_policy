@@ -453,9 +453,17 @@ def test_mirror_position_none_stays_none():
 
 
 def test_mirror_position_is_involution():
-    # Zweimal spiegeln (Schreiben + Zurücklesen) ergibt das Original.
+    # Zweimal spiegeln ergibt das Original.
     for p in (0, 33, 60, 100):
         assert policy.mirror_position(policy.mirror_position(p, True), True) == p
+
+
+def test_default_inverted_profile_is_mirror_of_normal():
+    """Zwei-Profile-Modell: das Invert-Default ist der Spiegel des Normal-Defaults."""
+    for mode, pos in const.DEFAULT_POSITION_PROFILE.items():
+        assert const.DEFAULT_POSITION_PROFILE_INVERTED[mode] == 100 - pos
+    # gleiche Modus-Menge, keine Lücken
+    assert set(const.DEFAULT_POSITION_PROFILE_INVERTED) == set(const.DEFAULT_POSITION_PROFILE)
 
 
 if __name__ == "__main__":

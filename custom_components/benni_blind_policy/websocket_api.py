@@ -15,6 +15,8 @@ from homeassistant.core import HomeAssistant
 from .const import (
     CONF_COVER_ENTITY,
     DATA_COORDINATOR,
+    DEFAULT_POSITION_PROFILE,
+    DEFAULT_POSITION_PROFILE_INVERTED,
     DOMAIN,
     GATE_CLOSE_LUX,
     GATE_OPEN_LUX,
@@ -29,6 +31,7 @@ from .const import (
     WS_APPLY_NOW,
     WS_CLEAR_OVERRIDE,
     WS_GET_STATUS,
+    WS_RESET_POSITION_PROFILE,
     WS_SET_APPLY_ENABLED,
     WS_SET_INVERT_POSITION,
     WS_SET_MANUAL_DECISION,
@@ -96,6 +99,9 @@ def _status(hass: HomeAssistant, coord) -> dict[str, Any]:
         "writing_active": coord.writing_active,
         "trace": [e.__dict__ for e in d.trace] if d else [],
         "position_profile": coord.position_profile,
+        "position_profile_inverted": coord.position_profile_inverted,
+        "default_position_profile": dict(DEFAULT_POSITION_PROFILE),
+        "default_position_profile_inverted": dict(DEFAULT_POSITION_PROFILE_INVERTED),
         "context": {
             "window_open": ctx.window_open,
             "bio_state": ctx.bio_state,
@@ -112,10 +118,9 @@ def _status(hass: HomeAssistant, coord) -> dict[str, Any]:
         "cover": {
             "entity_id": cover_eid,
             "state": cover_st.state if cover_st else None,
-            # Logische Achse (gespiegelt bei Invert) — damit Ist + Ziel dieselbe
-            # Koordinate sprechen; die rohe Geräteposition steht daneben.
-            "current_position": coord.cover_position_logical,
-            "current_position_raw": coord.cover_position_raw,
+            # Zwei-Profile-Modell: kein Mirror — die rohe Geräteposition ist die
+            # aktive Achse (das gewählte Profil schreibt direkt).
+            "current_position": coord.cover_position_raw,
         },
         "source_bindings": _source_bindings(hass, coord),
     }
@@ -197,7 +202,8 @@ def async_setup_websocket_api(hass: HomeAssistant) -> None:
 
     @websocket_api.websocket_command({
         vol.Required("type"): WS_SET_POSITION_PROFILE,
-        vol.Required("position_profile"): {str: vol.Any(int, float, str)},
+        vol.Optional("position_profile"): {str: vol.Any(int, float, str)},
+        vol.Optional("position_profile_inverted"): {str: vol.Any(int, float, str)},
     })
     @websocket_api.require_admin
     @websocket_api.async_response
@@ -206,7 +212,21 @@ def async_setup_websocket_api(hass: HomeAssistant) -> None:
         if coord is None:
             connection.send_error(msg["id"], "not_ready", "Blind Policy not loaded")
             return
-        await coord.async_set_position_profile(msg["position_profile"])
+        await coord.async_set_position_profile(
+            normal=msg.get("position_profile"),
+            inverted=msg.get("position_profile_inverted"),
+        )
+        connection.send_result(msg["id"], _status(hass, coord))
+
+    @websocket_api.websocket_command({vol.Required("type"): WS_RESET_POSITION_PROFILE})
+    @websocket_api.require_admin
+    @websocket_api.async_response
+    async def ws_reset_position_profile(hass, connection, msg) -> None:
+        coord = _coordinator(hass)
+        if coord is None:
+            connection.send_error(msg["id"], "not_ready", "Blind Policy not loaded")
+            return
+        await coord.async_reset_position_profiles()
         connection.send_result(msg["id"], _status(hass, coord))
 
     @websocket_api.websocket_command({
@@ -240,6 +260,6 @@ def async_setup_websocket_api(hass: HomeAssistant) -> None:
     for cmd in (
         ws_get_status, ws_apply_now, ws_set_apply_enabled, ws_set_invert_position,
         ws_set_privacy_bed, ws_clear_override, ws_set_position_profile,
-        ws_set_manual_position, ws_set_manual_decision,
+        ws_reset_position_profile, ws_set_manual_position, ws_set_manual_decision,
     ):
         websocket_api.async_register_command(hass, cmd)

@@ -47,6 +47,7 @@ from .const import (
     CONF_MEDIA_SCENARIO,
     CONF_OUTDOOR_TEMP,
     CONF_POSITION_PROFILE,
+    CONF_POSITION_PROFILE_INVERTED,
     CONF_PRESENCE_HOUSEHOLD,
     CONF_PROFILE,
     CONF_STARTUP_BLOCK_SECONDS,
@@ -59,6 +60,7 @@ from .const import (
     DEFAULT_APPLY_ENABLED,
     DEFAULT_INVERT_POSITION,
     DEFAULT_POSITION_PROFILE,
+    DEFAULT_POSITION_PROFILE_INVERTED,
     DEFAULT_PROFILE_ROUTE,
     DEFAULT_STARTUP_BLOCK_SECONDS,
     DOMAIN,
@@ -164,6 +166,18 @@ class BlindPolicyCoordinator:
         merged = {**DEFAULT_POSITION_PROFILE, **(raw if isinstance(raw, dict) else {})}
         return merged
 
+    @property
+    def position_profile_inverted(self) -> dict[str, int]:
+        raw = self._opt(CONF_POSITION_PROFILE_INVERTED) or {}
+        merged = {**DEFAULT_POSITION_PROFILE_INVERTED, **(raw if isinstance(raw, dict) else {})}
+        return merged
+
+    @property
+    def active_position_profile(self) -> dict[str, int]:
+        """Aktives Profil je nach Schalter — zwei UNABHÄNGIGE Wertesätze, kein Mirror.
+        Der gewählte Wert ist die direkte Geräteposition."""
+        return self.position_profile_inverted if self.invert_position else self.position_profile
+
     # ----- öffentliche Status-Accessoren (Entities/Panel) -----
     @property
     def last_decision(self) -> policy.Decision | None:
@@ -207,13 +221,9 @@ class BlindPolicyCoordinator:
 
     @property
     def cover_position_raw(self) -> float | None:
-        """Rohe Geräteposition (physische Achse)."""
+        """Rohe Geräteposition. Mit dem Zwei-Profile-Modell ist das zugleich die
+        aktive Achse (das gewählte Profil schreibt direkt, kein Mirror)."""
         return self._cover_position()
-
-    @property
-    def cover_position_logical(self) -> float | None:
-        """Ist-Position in logischen Policy-Koordinaten (gespiegelt bei Invert)."""
-        return self._logical_position()
 
     def _startup_ready(self) -> bool:
         if not self._ha_started:
@@ -392,15 +402,6 @@ class BlindPolicyCoordinator:
             return None
         return _float_or_none(st.attributes.get("current_position"))
 
-    def _logical_position(self) -> float | None:
-        """Ist-Position in logischen Policy-Koordinaten (physisch → logisch).
-
-        Alle Soll-/Ist-Vergleiche (Apply-Skip, Override-Erkennung, Warden) laufen
-        gegen logische Ziele; wenn die Cover-Achse invertiert ist, muss die rohe
-        Ist-Position erst zurückgespiegelt werden, sonst bricht die Toleranz-Logik.
-        """
-        return policy.mirror_position(self._cover_position(), self.invert_position)
-
     def _cover_moving(self) -> bool:
         if not self.cover_entity:
             return False
@@ -448,7 +449,7 @@ class BlindPolicyCoordinator:
             self._writing_off_ts is not None
             and (now - self._writing_off_ts) <= WARDEN_RACE_ECHO_SECONDS
         )
-        at_target = policy.position_within_tolerance(self._logical_position(), self._last_target)
+        at_target = policy.position_within_tolerance(self._cover_position(), self._last_target)
         if policy.override_warden_immediate_clear(writing_recently_off, at_target):
             return  # false-positive — gar nicht erst setzen
         self._manual_override = True
@@ -461,7 +462,7 @@ class BlindPolicyCoordinator:
         if not self._manual_override or self._override_set_ts is None:
             return
         age = time.monotonic() - self._override_set_ts
-        at_target = policy.position_within_tolerance(self._logical_position(), self._last_target)
+        at_target = policy.position_within_tolerance(self._cover_position(), self._last_target)
         if policy.override_warden_sweep_clear(age, self._cover_moving(), at_target):
             self._manual_override = False
             self._override_set_ts = None
@@ -513,7 +514,7 @@ class BlindPolicyCoordinator:
         self._prev_gate = gate
 
         decision = policy.decide(
-            ctx, self.position_profile,
+            ctx, self.active_position_profile,
             gate_on=gate,
             startup_ready=self._startup_ready(),
             apply_enabled=self.apply_enabled,
@@ -536,21 +537,20 @@ class BlindPolicyCoordinator:
 
     # ----- apply (gated, R-MO Writing-Active) -----
     async def _apply(self, target: int) -> None:
-        target = max(0, min(100, int(target)))   # logisch (0 = zu, 100 = offen)
-        current = self._logical_position()         # logisch
+        # Ziel ist die direkte Geräteposition (aktives Profil hat sie schon gewählt).
+        target = max(0, min(100, int(target)))
+        current = self._cover_position()
         # Nichts tun, wenn das Rollo schon (≈) auf Ziel steht — verhindert
         # unnötige Fahrten + Writing-Flag-Churn.
         if current is not None and abs(current - target) < 1:
             return
-        self._last_target = target                 # logisch (Vergleichsbasis Warden)
+        self._last_target = target
         self._last_apply_ts = time.monotonic()
         self._set_writing_active(True)
-        # Adapter-Grenze: logisch → physisch erst hier, am echten Schreibbefehl.
-        physical = int(policy.mirror_position(target, self.invert_position))
         try:
             await self.hass.services.async_call(
                 "cover", "set_cover_position",
-                {"entity_id": self.cover_entity, "position": physical},
+                {"entity_id": self.cover_entity, "position": target},
                 blocking=False,
             )
         except Exception as err:  # noqa: BLE001 - ein Fehlversuch darf den Loop nicht killen
@@ -632,7 +632,7 @@ class BlindPolicyCoordinator:
         """Panel: Policy manuell auf einen Modus zwingen (Position aus dem Profil)."""
         if mode not in DEFAULT_POSITION_PROFILE:
             return
-        pos = policy._position(mode, self.position_profile)
+        pos = policy._position(mode, self.active_position_profile)
         self._manual_override = True
         self._manual_explicit = True
         self._manual_mode = mode
@@ -660,20 +660,51 @@ class BlindPolicyCoordinator:
         self.hass.config_entries.async_update_entry(self.entry, options=new_options)
         await self.async_evaluate()
 
-    async def async_set_position_profile(self, profile: dict[str, int]) -> dict[str, int]:
-        cleaned = {
+    @staticmethod
+    def _clean_profile(profile: dict[str, int] | None) -> dict[str, int]:
+        return {
             str(k): max(0, min(100, int(v)))
             for k, v in (profile or {}).items()
             if k in DEFAULT_POSITION_PROFILE
         }
+
+    async def async_set_position_profile(
+        self,
+        normal: dict[str, int] | None = None,
+        inverted: dict[str, int] | None = None,
+    ) -> dict[str, dict[str, int]]:
+        """Beide Profile (partiell) setzen — normal und/oder invertiert."""
+        new_options = {**self.entry.options}
+        if normal is not None:
+            new_options[CONF_POSITION_PROFILE] = {
+                **self.position_profile, **self._clean_profile(normal)
+            }
+        if inverted is not None:
+            new_options[CONF_POSITION_PROFILE_INVERTED] = {
+                **self.position_profile_inverted, **self._clean_profile(inverted)
+            }
+        self._skip_next_entry_reload()
+        self.hass.config_entries.async_update_entry(self.entry, options=new_options)
+        await self.async_evaluate()
+        return {
+            "position_profile": self.position_profile,
+            "position_profile_inverted": self.position_profile_inverted,
+        }
+
+    async def async_reset_position_profiles(self) -> dict[str, dict[str, int]]:
+        """Beide Profile auf die Defaults (Normal + gespiegeltes Default) zurücksetzen."""
         self._skip_next_entry_reload()
         new_options = {
             **self.entry.options,
-            CONF_POSITION_PROFILE: {**self.position_profile, **cleaned},
+            CONF_POSITION_PROFILE: dict(DEFAULT_POSITION_PROFILE),
+            CONF_POSITION_PROFILE_INVERTED: dict(DEFAULT_POSITION_PROFILE_INVERTED),
         }
         self.hass.config_entries.async_update_entry(self.entry, options=new_options)
         await self.async_evaluate()
-        return self.position_profile
+        return {
+            "position_profile": self.position_profile,
+            "position_profile_inverted": self.position_profile_inverted,
+        }
 
     def _skip_next_entry_reload(self) -> None:
         data = self.hass.data.setdefault(DOMAIN, {})

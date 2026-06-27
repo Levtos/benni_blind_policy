@@ -444,16 +444,11 @@ def override_warden_sweep_clear(
 def mirror_position(position: float | None, invert: bool) -> float | None:
     """Spiegelt eine Position an der Achse 0↔100, wenn ``invert``.
 
-    Adapter zwischen der *logischen* Policy-Koordinate (0 = unten/zu, 100 =
-    oben/offen) und der *physischen* Cover-Achse, falls die Fahrtrichtung am Gerät
-    invertiert ist. Der Coordinator nutzt ihn an genau einer Stelle in BEIDE
-    Richtungen: beim Schreiben (logisch → physisch ans ``set_cover_position``) und
-    beim Lesen der Ist-Position (physisch → logisch, vor jedem Tolerance-Vergleich).
-    So bleiben Policy-Entscheidung + Decision-Trace immer in logischen Koordinaten
-    (Shadow-Vergleich bleibt aussagekräftig), nur das I/O wird gedreht.
-
-    Involution: zweimal angewandt liefert das Original. ``None`` (Position
-    unbekannt) bleibt ``None``.
+    Reiner Helfer (Involution). Seit dem Zwei-Profile-Modell wird die Invertierung
+    NICHT mehr als Mirror am Apply gerechnet — stattdessen gibt es zwei unabhängige
+    Positions-Profile (normal / invertiert), und der Schalter wählt das aktive. Diese
+    Funktion liefert nur noch den Default-Spiegel zum Vorbelegen des Invert-Profils
+    (``DEFAULT_POSITION_PROFILE_INVERTED``). ``None`` bleibt ``None``.
     """
     if position is None or not invert:
         return position

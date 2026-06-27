@@ -110,13 +110,32 @@ button.tiny.off { background:#3a2d33; border-color:#f7768e55; color:#f7768e; }
 .manual input[type=range] { flex:1; accent-color:#7aa2f7; }
 .manual select { background:#24283b; color:#c0caf5; border:1px solid #2a2e42; border-radius:8px; padding:6px 8px; font-size:12px; flex:1; }
 .manual .val { width:44px; text-align:right; color:#7dcfff; font-size:12px; }
-.ppgrid { display:grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap:8px 16px; }
-.ppline { display:flex; align-items:center; gap:8px; padding:3px 0; }
-.ppline .pplabel { flex:1; font-size:12px; color:#c0caf5; }
-.ppline input[type=number] { width:62px; background:#24283b; color:#c0caf5; border:1px solid #2a2e42;
-  border-radius:8px; padding:5px 8px; font-size:12px; }
-.ppline input[type=number]:focus { outline:none; border-color:#7aa2f7; }
-.ppline .ppphy { width:80px; text-align:right; font-size:11px; color:#62b378; }
+.cardhead { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px; }
+.cardhead h2 { margin:0; }
+.note { font-size:10px; color:#565f89; line-height:1.3; }
+.thead, .trow { display:grid; grid-template-columns:14px 28px minmax(140px,1fr) 90px 90px 30px; gap:8px; align-items:center; }
+.thead { padding:0 6px 6px; color:#565f89; font-size:10px; text-transform:uppercase; letter-spacing:.04em; }
+.thead .ppcol { text-align:center; color:#7aa2f7; }
+.ttable { font-size:13px; display:flex; flex-direction:column; gap:2px; }
+.trow { padding:5px 6px; border-radius:8px; }
+.trow.win { background:#243b2a; }
+.trow .rid { color:#565f89; }
+.trow .nmwrap { display:flex; flex-direction:column; gap:1px; min-width:0; }
+.trow .nm { color:#c0caf5; display:flex; align-items:center; gap:6px; }
+.trow .cond { font-size:10px; color:#565f89; line-height:1.25; }
+.aktiv { font-size:9px; padding:1px 6px; border-radius:999px; background:#2d3a2e;
+  border:1px solid #9ece6a55; color:#9ece6a; letter-spacing:.04em; }
+.ppcell { display:flex; align-items:center; justify-content:center; gap:3px; border-radius:8px;
+  padding:3px; border:1px solid transparent; }
+.ppcell.cellact { background:rgba(98,179,120,.18); border-color:#62b378; }
+.ppcell input[type=number] { width:46px; background:#24283b; color:#c0caf5; border:1px solid #2a2e42;
+  border-radius:6px; padding:4px 6px; font-size:12px; text-align:right; }
+.ppcell input[type=number]:focus { outline:none; border-color:#7aa2f7; }
+.ppcell .pct { font-size:10px; color:#565f89; }
+.rowedit { padding:3px 7px; font-size:13px; line-height:1; }
+.resetbox { display:flex; align-items:center; justify-content:space-between; gap:10px;
+  margin-top:12px; border-top:1px solid #2a2e42; padding-top:10px; }
+.resetbox .note { flex:1; }
 `;
 
 class BbpApp extends HTMLElement {
@@ -159,17 +178,24 @@ class BbpApp extends HTMLElement {
     const s = this._status; if (!s) return;
     const c = s.context || {};
     const pos = s.target_position;
+    const inv = !!s.invert_position;
+    const pp = s.position_profile || {};
+    const ppi = s.position_profile_inverted || {};
     const winRule = (s.trace || []).find((e) => e.matched);
     const cond = ruleConditions(s.thresholds);
     const trace = (s.trace || []).map((e) => {
+      const m = RULE_LABEL[e.rule] || e.mode;
       const isWin = winRule && e.rule === winRule.rule;
-      const afterWin = winRule && Number(e.rule.slice(1)) > Number(winRule.rule.slice(1));
-      return `<div class="t ${isWin ? "win" : ""} ${afterWin ? "skip" : ""}">
+      const nv = pp[m], iv = ppi[m];
+      const nAct = (!inv && isWin) ? "cellact" : "";
+      const iAct = (inv && isWin) ? "cellact" : "";
+      return `<div class="trow ${isWin ? "win" : ""}">
         <span class="dot ${isWin ? "win" : e.matched ? "true" : ""}"></span>
         <span class="rid">${e.rule}</span>
-        <div class="nmwrap"><span class="nm">${RULE_LABEL[e.rule] || e.mode}</span><span class="cond">${cond[e.rule] || ""}</span></div>
-        <span class="res ${e.matched ? "true" : "false"}">${afterWin ? "skip" : e.matched}</span>
-        <span class="pos">${e.position != null ? e.position + "%" : "—"}</span>
+        <div class="nmwrap"><span class="nm">${m}${isWin ? ` <span class="aktiv">AKTIV</span>` : ""}</span><span class="cond">${cond[e.rule] || ""}</span></div>
+        <span class="ppcell ${nAct}"><input type="number" min="0" max="100" step="5" id="n_${m}" value="${nv ?? ""}"><span class="pct">%</span></span>
+        <span class="ppcell ${iAct}"><input type="number" min="0" max="100" step="5" id="i_${m}" value="${iv ?? ""}"><span class="pct">%</span></span>
+        <button class="rowedit" id="e_${m}" title="Zeile speichern">✎</button>
       </div>`;
     }).join("");
 
@@ -200,70 +226,6 @@ class BbpApp extends HTMLElement {
       writing_active: s.writing_active, cover: s.cover,
     }, null, 2);
 
-    // Positions-Achse: logische (Policy) vs. physische (Gerät) Werte nebeneinander,
-    // aktive Spalte grün markiert. Logisch konvergiert immer aufs Ziel — erst der
-    // physisch/logisch-Vergleich macht die Invertierung sichtbar.
-    const inv = !!s.invert_position;
-    const fmtP = (v) => (v != null ? v + " %" : "—");
-    const tgtLog = pos;
-    const tgtPhy = pos != null ? (inv ? 100 - pos : pos) : null;
-    const istLog = s.cover ? s.cover.current_position : null;
-    const istPhy = s.cover ? s.cover.current_position_raw : null;
-    const colAct = "background:rgba(98,179,120,.18);border:1px solid #62b378;border-radius:8px;";
-    const colDim = "opacity:.5;border:1px solid transparent;";
-    const logS = inv ? colDim : colAct;
-    const phyS = inv ? colAct : colDim;
-    const cell = (v, st, big) =>
-      `<div style="text-align:center;padding:6px;${st}${big ? "font-size:20px;font-weight:600;" : "font-weight:600;"}">${v}</div>`;
-    const axisBlock = `
-      <div class="card" style="margin-bottom:14px;">
-        <h2>Positions-Achse ${inv
-          ? `<span class="badge" style="background:#62b378;color:#0b1020;">invertiert aktiv</span>`
-          : `<span class="badge neutral">normal</span>`}</h2>
-        <div style="display:grid;grid-template-columns:64px 1fr 1fr;gap:8px;align-items:center;">
-          <div></div>
-          ${cell("Logisch · Policy", logS, false)}
-          ${cell("Physisch · Gerät", phyS, false)}
-          <div class="mut">Ziel</div>
-          ${cell(fmtP(tgtLog), logS, true)}
-          ${cell(fmtP(tgtPhy), phyS, true)}
-          <div class="mut">Ist</div>
-          ${cell(fmtP(istLog), logS, true)}
-          ${cell(fmtP(istPhy), phyS, true)}
-        </div>
-        <div class="mut" style="margin-top:8px;">${inv
-          ? "Achse invertiert: die Policy denkt logisch, das Gerät fährt gespiegelt (100 − logisch). Grün = was am Gerät real passiert."
-          : "Achse normal: logisch = physisch. Beim Invertieren spiegelt sich die rechte Spalte (100 − logisch)."}</div>
-      </div>`;
-
-    // Zielwert-Editor: Position je Modus (logisch). Bei invertierter Achse zeigt
-    // jede Zeile zusätzlich den physischen Wert (= Invert-Indikator an den Werten).
-    const EDIT_MODES = [
-      "window_open", "privacy_bed", "privacy", "alarm_wakeup", "open_weekday",
-      "open_weekend", "sleep", "heat", "glare_tv", "glare_pc", "open",
-    ];
-    const pp = s.position_profile || {};
-    const ppRows = EDIT_MODES.map((m) => {
-      const v = pp[m];
-      const phy = (v != null && inv) ? 100 - v : null;
-      return `<div class="ppline">
-        <span class="pplabel">${MODE_LABEL[m] || m}</span>
-        <input type="number" min="0" max="100" step="5" id="pp_${m}" value="${v ?? ""}">
-        <span class="ppphy">${phy != null ? `→ phys ${phy}%` : ""}</span>
-      </div>`;
-    }).join("");
-    const profileBlock = `
-      <div class="card" style="margin-top:14px;">
-        <h2>Zielwerte je Modus ${inv
-          ? `<span class="badge" style="background:#62b378;color:#0b1020;">Achse invertiert</span>` : ""}</h2>
-        <div class="ppgrid">${ppRows}</div>
-        <div class="actions" style="margin-top:10px;">
-          <button class="go" id="ppsave">Zielwerte speichern</button>
-        </div>
-        <div class="mut">Werte sind logisch (0 = unten/zu, 100 = oben/offen).${inv
-          ? " Achse invertiert → „phys“ zeigt, was das Gerät real anfährt (100 − logisch)."
-          : " Bei invertierter Achse erscheint je Zeile zusätzlich der physische Wert."}</div>
-      </div>`;
 
     const root = this.shadowRoot.getElementById("root");
     root.className = "";
@@ -297,12 +259,17 @@ class BbpApp extends HTMLElement {
         <span class="badge neutral">Bio: ${c.bio_state || "—"}</span>
       </div>
 
-      ${axisBlock}
-
       <div class="grid" style="grid-template-columns: 1fr 1fr;">
         <div class="card">
-          <h2>Decision Trace (Prioritätskette)</h2>
-          <div class="trace">${trace}</div>
+          <div class="cardhead">
+            <h2>Decision Trace (Prioritätskette)</h2>
+            <span class="note">ⓘ Inversion betrifft nur Zielpositionen.</span>
+          </div>
+          <div class="thead">
+            <span></span><span>Prio</span><span>Regel / ID · Bedingung</span>
+            <span class="ppcol">Normal</span><span class="ppcol">Invertiert</span><span></span>
+          </div>
+          <div class="ttable">${trace}</div>
         </div>
         <div class="card">
           <h2>Input-States</h2>
@@ -312,7 +279,10 @@ class BbpApp extends HTMLElement {
 
       <div class="grid" style="grid-template-columns: 1fr 1fr; margin-top:14px;">
         <div class="card">
-          <h2>Debug-Sensor</h2>
+          <div class="cardhead">
+            <h2>Debug-Sensor</h2>
+            <button class="tiny" id="dbgcopy" title="JSON in die Zwischenablage">⧉ Kopieren</button>
+          </div>
           <pre>${debug}</pre>
         </div>
         <div class="card">
@@ -332,7 +302,7 @@ class BbpApp extends HTMLElement {
             </div>
             <div class="line">
               <label>Modus</label>
-              <select id="mmode">${(s.manual_modes || []).map((m) => `<option value="${m}" ${s.manual_mode === m ? "selected" : ""}>${MODE_LABEL[m] || m} · ${(s.position_profile || {})[m] ?? "—"}%</option>`).join("")}</select>
+              <select id="mmode">${(s.manual_modes || []).map((m) => `<option value="${m}" ${s.manual_mode === m ? "selected" : ""}>${MODE_LABEL[m] || m} · ${(inv ? ppi : pp)[m] ?? "—"}%</option>`).join("")}</select>
               <button class="tiny" id="mset">Setzen</button>
             </div>
           </div>
@@ -340,11 +310,13 @@ class BbpApp extends HTMLElement {
             ? `Manuell aktiv: ${s.manual_mode ? (MODE_LABEL[s.manual_mode] || s.manual_mode) : (s.manual_target + "%")} — „Override löschen" gibt an die Automatik zurück.`
             : (s.apply_enabled ? "Automatik steuert das Rollo." : "Shadow: Automatik aus — nur der Manuell-Slider/Modus fährt.")}</div>
           <div class="mut">Blocker: ${(s.blockers || []).join(", ") || "keine"} · Apply erlaubt: ${s.apply_allowed}</div>
-          <div class="mut">Cover: ${s.cover?.entity_id || "—"} @ ${s.cover?.current_position ?? "—"}%${s.invert_position && s.cover?.current_position_raw != null ? ` (physisch ${s.cover.current_position_raw}%)` : ""}</div>
+          <div class="mut">Cover: ${s.cover?.entity_id || "—"} @ ${s.cover?.current_position ?? "—"}%</div>
+          <div class="resetbox">
+            <span class="note">ⓘ Die Inversion wirkt nur auf Zielpositionen. Alle Bedingungen und Prioritäten bleiben unverändert.</span>
+            <button id="ppreset" title="Beide Profile (Normal + Invertiert) auf Default zurücksetzen">↺ Zurücksetzen</button>
+          </div>
         </div>
-      </div>
-
-      ${profileBlock}`;
+      </div>`;
 
     const $ = (id) => this.shadowRoot.getElementById(id);
     $("menu").onclick = () =>
@@ -358,14 +330,26 @@ class BbpApp extends HTMLElement {
     mpos.oninput = () => { mval.textContent = mpos.value + "%"; };
     $("mgo").onclick = () => this._call("benni_blind_policy/set_manual_position", { position: Number(mpos.value) });
     $("mset").onclick = () => this._call("benni_blind_policy/set_manual_decision", { mode: $("mmode").value });
-    $("ppsave").onclick = () => {
-      const prof = {};
-      EDIT_MODES.forEach((m) => {
-        const el = $("pp_" + m);
-        if (el && el.value !== "") prof[m] = Math.max(0, Math.min(100, Number(el.value)));
-      });
-      this._call("benni_blind_policy/set_position_profile", { position_profile: prof });
-    };
+
+    // Pro-Zeile: Stift speichert Normal + Invertiert dieses Modus unabhängig.
+    const clamp = (v) => Math.max(0, Math.min(100, Number(v)));
+    (s.trace || []).forEach((e) => {
+      const m = RULE_LABEL[e.rule] || e.mode;
+      const btn = $("e_" + m);
+      if (!btn) return;
+      btn.onclick = () => {
+        const nEl = $("n_" + m), iEl = $("i_" + m);
+        const np = {}, ip = {};
+        if (nEl && nEl.value !== "") np[m] = clamp(nEl.value);
+        if (iEl && iEl.value !== "") ip[m] = clamp(iEl.value);
+        this._call("benni_blind_policy/set_position_profile",
+          { position_profile: np, position_profile_inverted: ip });
+      };
+    });
+    const reset = $("ppreset");
+    if (reset) reset.onclick = () => this._call("benni_blind_policy/reset_position_profile");
+    const copy = $("dbgcopy");
+    if (copy) copy.onclick = () => { try { navigator.clipboard.writeText(debug); copy.textContent = "✓ Kopiert"; } catch (_) {} };
   }
 }
 
