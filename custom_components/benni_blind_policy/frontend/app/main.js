@@ -193,6 +193,42 @@ class BbpApp extends HTMLElement {
       writing_active: s.writing_active, cover: s.cover,
     }, null, 2);
 
+    // Positions-Achse: logische (Policy) vs. physische (Gerät) Werte nebeneinander,
+    // aktive Spalte grün markiert. Logisch konvergiert immer aufs Ziel — erst der
+    // physisch/logisch-Vergleich macht die Invertierung sichtbar.
+    const inv = !!s.invert_position;
+    const fmtP = (v) => (v != null ? v + " %" : "—");
+    const tgtLog = pos;
+    const tgtPhy = pos != null ? (inv ? 100 - pos : pos) : null;
+    const istLog = s.cover ? s.cover.current_position : null;
+    const istPhy = s.cover ? s.cover.current_position_raw : null;
+    const colAct = "background:rgba(98,179,120,.18);border:1px solid #62b378;border-radius:8px;";
+    const colDim = "opacity:.5;border:1px solid transparent;";
+    const logS = inv ? colDim : colAct;
+    const phyS = inv ? colAct : colDim;
+    const cell = (v, st, big) =>
+      `<div style="text-align:center;padding:6px;${st}${big ? "font-size:20px;font-weight:600;" : "font-weight:600;"}">${v}</div>`;
+    const axisBlock = `
+      <div class="card" style="margin-bottom:14px;">
+        <h2>Positions-Achse ${inv
+          ? `<span class="badge" style="background:#62b378;color:#0b1020;">invertiert aktiv</span>`
+          : `<span class="badge neutral">normal</span>`}</h2>
+        <div style="display:grid;grid-template-columns:64px 1fr 1fr;gap:8px;align-items:center;">
+          <div></div>
+          ${cell("Logisch · Policy", logS, false)}
+          ${cell("Physisch · Gerät", phyS, false)}
+          <div class="mut">Ziel</div>
+          ${cell(fmtP(tgtLog), logS, true)}
+          ${cell(fmtP(tgtPhy), phyS, true)}
+          <div class="mut">Ist</div>
+          ${cell(fmtP(istLog), logS, true)}
+          ${cell(fmtP(istPhy), phyS, true)}
+        </div>
+        <div class="mut" style="margin-top:8px;">${inv
+          ? "Achse invertiert: die Policy denkt logisch, das Gerät fährt gespiegelt (100 − logisch). Grün = was am Gerät real passiert."
+          : "Achse normal: logisch = physisch. Beim Invertieren spiegelt sich die rechte Spalte (100 − logisch)."}</div>
+      </div>`;
+
     const root = this.shadowRoot.getElementById("root");
     root.className = "";
     root.innerHTML = `
@@ -221,6 +257,8 @@ class BbpApp extends HTMLElement {
         ${this._badge("Achse invertiert", s.invert_position)}
         <span class="badge neutral">Bio: ${c.bio_state || "—"}</span>
       </div>
+
+      ${axisBlock}
 
       <div class="grid" style="grid-template-columns: 1fr 1fr;">
         <div class="card">
