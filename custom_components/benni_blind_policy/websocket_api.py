@@ -112,7 +112,10 @@ def _status(hass: HomeAssistant, coord) -> dict[str, Any]:
         "cover": {
             "entity_id": cover_eid,
             "state": cover_st.state if cover_st else None,
-            "current_position": (cover_st.attributes.get("current_position") if cover_st else None),
+            # Logische Achse (gespiegelt bei Invert) — damit Ist + Ziel dieselbe
+            # Koordinate sprechen; die rohe Geräteposition steht daneben.
+            "current_position": coord.cover_position_logical,
+            "current_position_raw": coord.cover_position_raw,
         },
         "source_bindings": _source_bindings(hass, coord),
     }

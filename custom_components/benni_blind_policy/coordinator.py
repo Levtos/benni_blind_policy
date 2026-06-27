@@ -205,6 +205,16 @@ class BlindPolicyCoordinator:
     def writing_active(self) -> bool:
         return self._writing_active
 
+    @property
+    def cover_position_raw(self) -> float | None:
+        """Rohe Geräteposition (physische Achse)."""
+        return self._cover_position()
+
+    @property
+    def cover_position_logical(self) -> float | None:
+        """Ist-Position in logischen Policy-Koordinaten (gespiegelt bei Invert)."""
+        return self._logical_position()
+
     def _startup_ready(self) -> bool:
         if not self._ha_started:
             return False

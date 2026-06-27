@@ -263,7 +263,7 @@ class BbpApp extends HTMLElement {
             ? `Manuell aktiv: ${s.manual_mode ? (MODE_LABEL[s.manual_mode] || s.manual_mode) : (s.manual_target + "%")} — „Override löschen" gibt an die Automatik zurück.`
             : (s.apply_enabled ? "Automatik steuert das Rollo." : "Shadow: Automatik aus — nur der Manuell-Slider/Modus fährt.")}</div>
           <div class="mut">Blocker: ${(s.blockers || []).join(", ") || "keine"} · Apply erlaubt: ${s.apply_allowed}</div>
-          <div class="mut">Cover: ${s.cover?.entity_id || "—"} @ ${s.cover?.current_position ?? "—"}%</div>
+          <div class="mut">Cover: ${s.cover?.entity_id || "—"} @ ${s.cover?.current_position ?? "—"}%${s.invert_position && s.cover?.current_position_raw != null ? ` (physisch ${s.cover.current_position_raw}%)` : ""}</div>
         </div>
       </div>`;
 
