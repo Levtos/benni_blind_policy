@@ -206,8 +206,8 @@ def async_setup_websocket_api(hass: HomeAssistant) -> None:
         if coord is None:
             connection.send_error(msg["id"], "not_ready", "Blind Policy not loaded")
             return
-        cleaned = await coord.async_set_position_profile(msg["position_profile"])
-        connection.send_result(msg["id"], {"position_profile": cleaned})
+        await coord.async_set_position_profile(msg["position_profile"])
+        connection.send_result(msg["id"], _status(hass, coord))
 
     @websocket_api.websocket_command({
         vol.Required("type"): WS_SET_MANUAL_POSITION,

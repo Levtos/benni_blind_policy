@@ -110,6 +110,13 @@ button.tiny.off { background:#3a2d33; border-color:#f7768e55; color:#f7768e; }
 .manual input[type=range] { flex:1; accent-color:#7aa2f7; }
 .manual select { background:#24283b; color:#c0caf5; border:1px solid #2a2e42; border-radius:8px; padding:6px 8px; font-size:12px; flex:1; }
 .manual .val { width:44px; text-align:right; color:#7dcfff; font-size:12px; }
+.ppgrid { display:grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap:8px 16px; }
+.ppline { display:flex; align-items:center; gap:8px; padding:3px 0; }
+.ppline .pplabel { flex:1; font-size:12px; color:#c0caf5; }
+.ppline input[type=number] { width:62px; background:#24283b; color:#c0caf5; border:1px solid #2a2e42;
+  border-radius:8px; padding:5px 8px; font-size:12px; }
+.ppline input[type=number]:focus { outline:none; border-color:#7aa2f7; }
+.ppline .ppphy { width:80px; text-align:right; font-size:11px; color:#62b378; }
 `;
 
 class BbpApp extends HTMLElement {
@@ -229,6 +236,35 @@ class BbpApp extends HTMLElement {
           : "Achse normal: logisch = physisch. Beim Invertieren spiegelt sich die rechte Spalte (100 − logisch)."}</div>
       </div>`;
 
+    // Zielwert-Editor: Position je Modus (logisch). Bei invertierter Achse zeigt
+    // jede Zeile zusätzlich den physischen Wert (= Invert-Indikator an den Werten).
+    const EDIT_MODES = [
+      "window_open", "privacy_bed", "privacy", "alarm_wakeup", "open_weekday",
+      "open_weekend", "sleep", "heat", "glare_tv", "glare_pc", "open",
+    ];
+    const pp = s.position_profile || {};
+    const ppRows = EDIT_MODES.map((m) => {
+      const v = pp[m];
+      const phy = (v != null && inv) ? 100 - v : null;
+      return `<div class="ppline">
+        <span class="pplabel">${MODE_LABEL[m] || m}</span>
+        <input type="number" min="0" max="100" step="5" id="pp_${m}" value="${v ?? ""}">
+        <span class="ppphy">${phy != null ? `→ phys ${phy}%` : ""}</span>
+      </div>`;
+    }).join("");
+    const profileBlock = `
+      <div class="card" style="margin-top:14px;">
+        <h2>Zielwerte je Modus ${inv
+          ? `<span class="badge" style="background:#62b378;color:#0b1020;">Achse invertiert</span>` : ""}</h2>
+        <div class="ppgrid">${ppRows}</div>
+        <div class="actions" style="margin-top:10px;">
+          <button class="go" id="ppsave">Zielwerte speichern</button>
+        </div>
+        <div class="mut">Werte sind logisch (0 = unten/zu, 100 = oben/offen).${inv
+          ? " Achse invertiert → „phys“ zeigt, was das Gerät real anfährt (100 − logisch)."
+          : " Bei invertierter Achse erscheint je Zeile zusätzlich der physische Wert."}</div>
+      </div>`;
+
     const root = this.shadowRoot.getElementById("root");
     root.className = "";
     root.innerHTML = `
@@ -238,7 +274,10 @@ class BbpApp extends HTMLElement {
       </div>
       <div class="subrow">
         <div class="sub">Wohnzimmer-Rollo — ${s.apply_enabled ? "Automatik aktiv" : "Shadow (Automatik aus)"}</div>
-        <button class="tiny ${s.apply_enabled ? "on" : "off"}" id="toggle">Automatik: ${s.apply_enabled ? "an" : "aus"}</button>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span class="badge ${inv ? "on" : "neutral"}" title="Achsen-Invertierung — bei umgekehrter Fahrtrichtung des Rollos">↕ Achse: ${inv ? "invertiert" : "normal"}</span>
+          <button class="tiny ${s.apply_enabled ? "on" : "off"}" id="toggle">Automatik: ${s.apply_enabled ? "an" : "aus"}</button>
+        </div>
       </div>
 
       <div class="grid cols">
@@ -303,7 +342,9 @@ class BbpApp extends HTMLElement {
           <div class="mut">Blocker: ${(s.blockers || []).join(", ") || "keine"} · Apply erlaubt: ${s.apply_allowed}</div>
           <div class="mut">Cover: ${s.cover?.entity_id || "—"} @ ${s.cover?.current_position ?? "—"}%${s.invert_position && s.cover?.current_position_raw != null ? ` (physisch ${s.cover.current_position_raw}%)` : ""}</div>
         </div>
-      </div>`;
+      </div>
+
+      ${profileBlock}`;
 
     const $ = (id) => this.shadowRoot.getElementById(id);
     $("menu").onclick = () =>
@@ -317,6 +358,14 @@ class BbpApp extends HTMLElement {
     mpos.oninput = () => { mval.textContent = mpos.value + "%"; };
     $("mgo").onclick = () => this._call("benni_blind_policy/set_manual_position", { position: Number(mpos.value) });
     $("mset").onclick = () => this._call("benni_blind_policy/set_manual_decision", { mode: $("mmode").value });
+    $("ppsave").onclick = () => {
+      const prof = {};
+      EDIT_MODES.forEach((m) => {
+        const el = $("pp_" + m);
+        if (el && el.value !== "") prof[m] = Math.max(0, Math.min(100, Number(el.value)));
+      });
+      this._call("benni_blind_policy/set_position_profile", { position_profile: prof });
+    };
   }
 }
 
