@@ -191,12 +191,18 @@ def test_heat_active():
     const.PHASE_LATE_MORNING,
     const.PHASE_FORENOON,
     const.PHASE_AFTERNOON,
-    const.PHASE_EARLY_EVENING,
 ])
-def test_heat_active_from_late_morning_to_early_evening(day_state):
+def test_heat_active_from_late_morning_to_afternoon(day_state):
     d = decide(ctx(day_state=day_state, weather_condition="sunny",
                    outdoor_temp=25, sun_elevation=20))
     assert d.mode == const.MODE_HEAT
+
+
+def test_heat_inactive_in_early_evening():
+    """Heat endet mit afternoon — early_evening zählt nicht mehr (User 2026-06-27)."""
+    d = decide(ctx(day_state=const.PHASE_EARLY_EVENING, weather_condition="sunny",
+                   outdoor_temp=25, sun_elevation=20))
+    assert d.mode != const.MODE_HEAT
 
 
 def test_heat_beats_open_weekday():

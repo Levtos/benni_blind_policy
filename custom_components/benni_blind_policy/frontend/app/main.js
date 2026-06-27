@@ -42,7 +42,7 @@ function ruleConditions(thr = {}) {
     R2: "Privacy-Bett-Schalter an",
     R3: `Haushalt leer ODER Privacy-Latch (Latch abends < ${pl ?? "?"} lx)`,
     R4: "Wecker-Schalter an",
-    R5: `sunny + ≥ ${ht ?? "?"} °C + Sonne > ${hs ?? "?"}° + late_morning bis early_evening`,
+    R5: `sunny + ≥ ${ht ?? "?"} °C + Sonne > ${hs ?? "?"}° + late_morning bis afternoon`,
     R6: `late_morning + Werktag + ab ${wd != null ? hhmm(wd) : "?"}`,
     R7: `forenoon + Wochenende/frei + ab ${we != null ? hhmm(we) : "?"}`,
     R8: "Bio = sleep ODER Nachtphase",
