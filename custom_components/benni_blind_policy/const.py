@@ -181,10 +181,12 @@ CORE_WINDOW_OPEN_ATTRIBUTE: Final = "living"
 CONF_APPLY_ENABLED: Final = "apply_enabled"
 CONF_STARTUP_BLOCK_SECONDS: Final = "startup_block_seconds"
 CONF_POSITION_PROFILE: Final = "position_profile"    # dict mode -> position
+CONF_INVERT_POSITION: Final = "invert_position"      # True = Cover-Achse gespiegelt (0↔100)
 
 # Defaults.
 DEFAULT_APPLY_ENABLED: Final = False                 # Shadow-safe out of the box
 DEFAULT_STARTUP_BLOCK_SECONDS: Final = 15
+DEFAULT_INVERT_POSITION: Final = False               # Richtung normal (logisch == physisch)
 
 # --------------------------------------------------------------------------- #
 # Per-Profil-Prefill: bekannte Live-IDs je Route (greift nur, WENN Entity existiert).
@@ -219,7 +221,7 @@ SOURCE_KEYS: Final = (
     CONF_MEDIA_SCENARIO, CONF_GAMING_SOURCE, CONF_WEATHER_CONDITION,
     CONF_OUTDOOR_TEMP,
 )
-OPTION_KEYS: Final = (CONF_APPLY_ENABLED, CONF_STARTUP_BLOCK_SECONDS)
+OPTION_KEYS: Final = (CONF_APPLY_ENABLED, CONF_STARTUP_BLOCK_SECONDS, CONF_INVERT_POSITION)
 
 # --------------------------------------------------------------------------- #
 # unique_id-Suffixe der Output-Entities
@@ -235,6 +237,7 @@ UID_APPLY_BLOCKED: Final = "apply_blocked"
 UID_PRIVACY_BED: Final = "privacy_bed"
 UID_ALARM_WAKEUP: Final = "alarm_wakeup"
 UID_APPLY_ENABLED: Final = "apply_enabled"
+UID_INVERT_POSITION: Final = "invert_position"
 
 # Entity-Feature-Slugs (→ <profile>_blind_policy_<feature> via has_entity_name).
 NAME_MODE: Final = "Mode"
@@ -248,6 +251,7 @@ NAME_APPLY_BLOCKED: Final = "Apply Blocked"
 NAME_PRIVACY_BED: Final = "Privacy Bed"
 NAME_ALARM_WAKEUP: Final = "Alarm Wakeup"
 NAME_APPLY_ENABLED: Final = "Apply Enabled"
+NAME_INVERT_POSITION: Final = "Invert Position"
 
 # --------------------------------------------------------------------------- #
 # Services
@@ -275,6 +279,7 @@ WS_APPLY_NOW: Final = f"{DOMAIN}/apply_now"
 WS_SET_POSITION_PROFILE: Final = f"{DOMAIN}/set_position_profile"
 WS_SET_MANUAL_POSITION: Final = f"{DOMAIN}/set_manual_position"
 WS_SET_MANUAL_DECISION: Final = f"{DOMAIN}/set_manual_decision"
+WS_SET_INVERT_POSITION: Final = f"{DOMAIN}/set_invert_position"
 
 # Modi, die im Panel manuell als Decision erzwingbar sind (window_open bleibt
 # absolut/safety-only, alarm_wakeup ist Platzhalter, open_weekday/-weekend sind

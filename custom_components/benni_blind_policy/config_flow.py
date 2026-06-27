@@ -18,11 +18,13 @@ from .const import (
     CONF_APPLY_ENABLED,
     CONFIG_ENTRY_VERSION,
     CONF_COVER_ENTITY,
+    CONF_INVERT_POSITION,
     CONF_PROFILE,
     CONF_STARTUP_BLOCK_SECONDS,
     CONF_SUN,
     CONF_WINDOW_OPEN,
     DEFAULT_APPLY_ENABLED,
+    DEFAULT_INVERT_POSITION,
     DEFAULT_PROFILE_ROUTE,
     DEFAULT_STARTUP_BLOCK_SECONDS,
     DOMAIN,
@@ -105,6 +107,10 @@ def _options_schema(defaults: dict[str, Any]) -> vol.Schema:
             CONF_STARTUP_BLOCK_SECONDS,
             default=int(defaults.get(CONF_STARTUP_BLOCK_SECONDS, DEFAULT_STARTUP_BLOCK_SECONDS)),
         ): _INT,
+        vol.Optional(
+            CONF_INVERT_POSITION,
+            default=bool(defaults.get(CONF_INVERT_POSITION, DEFAULT_INVERT_POSITION)),
+        ): _BOOL,
     })
 
 

@@ -436,3 +436,25 @@ def override_warden_sweep_clear(
         and not cover_moving
         and position_at_target
     )
+
+
+# --------------------------------------------------------------------------- #
+# Positions-Adapter — logische Policy-Achse ↔ physische Cover-Achse
+# --------------------------------------------------------------------------- #
+def mirror_position(position: float | None, invert: bool) -> float | None:
+    """Spiegelt eine Position an der Achse 0↔100, wenn ``invert``.
+
+    Adapter zwischen der *logischen* Policy-Koordinate (0 = unten/zu, 100 =
+    oben/offen) und der *physischen* Cover-Achse, falls die Fahrtrichtung am Gerät
+    invertiert ist. Der Coordinator nutzt ihn an genau einer Stelle in BEIDE
+    Richtungen: beim Schreiben (logisch → physisch ans ``set_cover_position``) und
+    beim Lesen der Ist-Position (physisch → logisch, vor jedem Tolerance-Vergleich).
+    So bleiben Policy-Entscheidung + Decision-Trace immer in logischen Koordinaten
+    (Shadow-Vergleich bleibt aussagekräftig), nur das I/O wird gedreht.
+
+    Involution: zweimal angewandt liefert das Original. ``None`` (Position
+    unbekannt) bleibt ``None``.
+    """
+    if position is None or not invert:
+        return position
+    return 100 - position

@@ -18,10 +18,12 @@ from .const import (
     DOMAIN,
     NAME_ALARM_WAKEUP,
     NAME_APPLY_ENABLED,
+    NAME_INVERT_POSITION,
     NAME_MANUAL_OVERRIDE,
     NAME_PRIVACY_BED,
     UID_ALARM_WAKEUP,
     UID_APPLY_ENABLED,
+    UID_INVERT_POSITION,
     UID_MANUAL_OVERRIDE,
     UID_PRIVACY_BED,
     unique_id,
@@ -38,6 +40,7 @@ async def async_setup_entry(
         AlarmWakeupSwitch(coord, entry),
         ManualOverrideSwitch(coord, entry),
         ApplyEnabledSwitch(coord, entry),
+        InvertPositionSwitch(coord, entry),
     ])
 
 
@@ -116,3 +119,25 @@ class ApplyEnabledSwitch(BlindPolicyEntity, SwitchEntity):
 
     async def async_turn_off(self, **kwargs) -> None:
         await self.coord.async_set_apply_enabled(False)
+
+
+class InvertPositionSwitch(BlindPolicyEntity, SwitchEntity):
+    """An = Cover-Achse gespiegelt (kompensiert eine umgekehrte Fahrtrichtung)."""
+
+    _attr_icon = "mdi:swap-vertical"
+    _attr_entity_category = EntityCategory.CONFIG
+
+    def __init__(self, coord, entry):
+        super().__init__(coord, entry)
+        self._attr_unique_id = unique_id(entry.entry_id, UID_INVERT_POSITION)
+        self._attr_name = NAME_INVERT_POSITION
+
+    @property
+    def is_on(self) -> bool:
+        return self.coord.invert_position
+
+    async def async_turn_on(self, **kwargs) -> None:
+        await self.coord.async_set_invert_position(True)
+
+    async def async_turn_off(self, **kwargs) -> None:
+        await self.coord.async_set_invert_position(False)

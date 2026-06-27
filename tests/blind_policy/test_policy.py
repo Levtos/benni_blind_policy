@@ -426,6 +426,32 @@ def test_warden_sweep_clear():
     assert policy.override_warden_sweep_clear(301, False, False) is False  # nicht auf Ziel
 
 
+# --------------------------------------------------------------------------- #
+# Positions-Adapter — logische ↔ physische Cover-Achse (Invert)
+# --------------------------------------------------------------------------- #
+def test_mirror_position_off_is_identity():
+    for p in (0, 40, 60, 100, 12.5, None):
+        assert policy.mirror_position(p, False) == p
+
+
+def test_mirror_position_on_flips_axis():
+    assert policy.mirror_position(0, True) == 100
+    assert policy.mirror_position(100, True) == 0
+    assert policy.mirror_position(40, True) == 60      # privacy/sleep
+    assert policy.mirror_position(75, True) == 25       # glare_pc
+    assert policy.mirror_position(12.5, True) == 87.5   # float Ist-Position
+
+
+def test_mirror_position_none_stays_none():
+    assert policy.mirror_position(None, True) is None
+
+
+def test_mirror_position_is_involution():
+    # Zweimal spiegeln (Schreiben + Zurücklesen) ergibt das Original.
+    for p in (0, 33, 60, 100):
+        assert policy.mirror_position(policy.mirror_position(p, True), True) == p
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-v"]))
 

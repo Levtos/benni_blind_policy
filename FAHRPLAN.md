@@ -17,6 +17,15 @@
 - [x] WS-API + Panel (Diagnose/Trace nach Screenshot-Referenz).
 - [x] 53 Pure-Logic-Tests grün, `py_compile` clean.
 
+## Erledigt (v0.3.0)
+
+- [x] **Achsen-Invert** (`invert_position`): Option + Config-Switch + WS + Panel-Toggle.
+      Adapter-Grenze am `set_cover_position` — Policy/Trace bleiben logisch (0=zu,
+      100=offen), nur I/O wird gespiegelt (`policy.mirror_position`, Involution).
+      ALLE drei Ist-Position-Vergleiche (Apply-Skip/Override/Warden) lesen via
+      `_logical_position()` zurückgespiegelt. Kompensiert eine umgekehrte
+      Fahrtrichtung am Gerät. 64 Tests grün.
+
 ## Offen / nur live verifizierbar (kein HA lokal)
 
 - [ ] **Live-Verify in HA:** Config-Entry anlegen (Profil benni), Quellen bestätigen,

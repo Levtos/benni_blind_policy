@@ -42,6 +42,7 @@ from .const import (
     CONF_DAY_CONTEXT,
     CONF_DAY_STATE,
     CONF_GAMING_SOURCE,
+    CONF_INVERT_POSITION,
     CONF_LUX,
     CONF_MEDIA_SCENARIO,
     CONF_OUTDOOR_TEMP,
@@ -56,6 +57,7 @@ from .const import (
     CORE_WINDOW_OPEN_ATTRIBUTE,
     DATA_SKIP_RELOAD_COUNT,
     DEFAULT_APPLY_ENABLED,
+    DEFAULT_INVERT_POSITION,
     DEFAULT_POSITION_PROFILE,
     DEFAULT_PROFILE_ROUTE,
     DEFAULT_STARTUP_BLOCK_SECONDS,
@@ -150,6 +152,11 @@ class BlindPolicyCoordinator:
     @property
     def startup_block_seconds(self) -> int:
         return int(self._opt(CONF_STARTUP_BLOCK_SECONDS, DEFAULT_STARTUP_BLOCK_SECONDS))
+
+    @property
+    def invert_position(self) -> bool:
+        """True = physische Cover-Achse gespiegelt (0↔100) gegenüber der Policy."""
+        return bool(self._opt(CONF_INVERT_POSITION, DEFAULT_INVERT_POSITION))
 
     @property
     def position_profile(self) -> dict[str, int]:
@@ -375,6 +382,15 @@ class BlindPolicyCoordinator:
             return None
         return _float_or_none(st.attributes.get("current_position"))
 
+    def _logical_position(self) -> float | None:
+        """Ist-Position in logischen Policy-Koordinaten (physisch → logisch).
+
+        Alle Soll-/Ist-Vergleiche (Apply-Skip, Override-Erkennung, Warden) laufen
+        gegen logische Ziele; wenn die Cover-Achse invertiert ist, muss die rohe
+        Ist-Position erst zurückgespiegelt werden, sonst bricht die Toleranz-Logik.
+        """
+        return policy.mirror_position(self._cover_position(), self.invert_position)
+
     def _cover_moving(self) -> bool:
         if not self.cover_entity:
             return False
@@ -422,7 +438,7 @@ class BlindPolicyCoordinator:
             self._writing_off_ts is not None
             and (now - self._writing_off_ts) <= WARDEN_RACE_ECHO_SECONDS
         )
-        at_target = policy.position_within_tolerance(self._cover_position(), self._last_target)
+        at_target = policy.position_within_tolerance(self._logical_position(), self._last_target)
         if policy.override_warden_immediate_clear(writing_recently_off, at_target):
             return  # false-positive — gar nicht erst setzen
         self._manual_override = True
@@ -435,7 +451,7 @@ class BlindPolicyCoordinator:
         if not self._manual_override or self._override_set_ts is None:
             return
         age = time.monotonic() - self._override_set_ts
-        at_target = policy.position_within_tolerance(self._cover_position(), self._last_target)
+        at_target = policy.position_within_tolerance(self._logical_position(), self._last_target)
         if policy.override_warden_sweep_clear(age, self._cover_moving(), at_target):
             self._manual_override = False
             self._override_set_ts = None
@@ -510,19 +526,21 @@ class BlindPolicyCoordinator:
 
     # ----- apply (gated, R-MO Writing-Active) -----
     async def _apply(self, target: int) -> None:
-        target = max(0, min(100, int(target)))
-        current = self._cover_position()
+        target = max(0, min(100, int(target)))   # logisch (0 = zu, 100 = offen)
+        current = self._logical_position()         # logisch
         # Nichts tun, wenn das Rollo schon (≈) auf Ziel steht — verhindert
         # unnötige Fahrten + Writing-Flag-Churn.
         if current is not None and abs(current - target) < 1:
             return
-        self._last_target = target
+        self._last_target = target                 # logisch (Vergleichsbasis Warden)
         self._last_apply_ts = time.monotonic()
         self._set_writing_active(True)
+        # Adapter-Grenze: logisch → physisch erst hier, am echten Schreibbefehl.
+        physical = int(policy.mirror_position(target, self.invert_position))
         try:
             await self.hass.services.async_call(
                 "cover", "set_cover_position",
-                {"entity_id": self.cover_entity, "position": target},
+                {"entity_id": self.cover_entity, "position": physical},
                 blocking=False,
             )
         except Exception as err:  # noqa: BLE001 - ein Fehlversuch darf den Loop nicht killen
@@ -622,6 +640,13 @@ class BlindPolicyCoordinator:
     async def async_set_apply_enabled(self, value: bool) -> None:
         self._skip_next_entry_reload()
         new_options = {**self.entry.options, CONF_APPLY_ENABLED: bool(value)}
+        self.hass.config_entries.async_update_entry(self.entry, options=new_options)
+        await self.async_evaluate()
+
+    async def async_set_invert_position(self, value: bool) -> None:
+        """Cover-Achse spiegeln (umgekehrte Fahrtrichtung kompensieren)."""
+        self._skip_next_entry_reload()
+        new_options = {**self.entry.options, CONF_INVERT_POSITION: bool(value)}
         self.hass.config_entries.async_update_entry(self.entry, options=new_options)
         await self.async_evaluate()
 

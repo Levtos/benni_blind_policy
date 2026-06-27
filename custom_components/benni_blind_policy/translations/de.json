@@ -30,7 +30,8 @@
         "title": "Optionen",
         "data": {
           "apply_enabled": "Apply aktiv (aus = Shadow-Mode)",
-          "startup_block_seconds": "Startup-Block (Sekunden)"
+          "startup_block_seconds": "Startup-Block (Sekunden)",
+          "invert_position": "Achse invertieren (umgekehrte Fahrtrichtung kompensieren)"
         }
       }
     },
@@ -68,7 +69,8 @@
         "title": "Optionen",
         "data": {
           "apply_enabled": "Apply aktiv (aus = Shadow-Mode)",
-          "startup_block_seconds": "Startup-Block (Sekunden)"
+          "startup_block_seconds": "Startup-Block (Sekunden)",
+          "invert_position": "Achse invertieren (umgekehrte Fahrtrichtung kompensieren)"
         }
       }
     }

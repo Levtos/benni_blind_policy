@@ -218,6 +218,7 @@ class BbpApp extends HTMLElement {
         ${this._badge("Lux-Gate", s.gate_on)}
         ${this._badge("Writing aktiv", s.writing_active)}
         ${this._badge("Apply aktiv", s.apply_enabled)}
+        ${this._badge("Achse invertiert", s.invert_position)}
         <span class="badge neutral">Bio: ${c.bio_state || "—"}</span>
       </div>
 
@@ -243,6 +244,7 @@ class BbpApp extends HTMLElement {
             <button class="go" id="apply" ${s.apply_enabled ? "" : "disabled"} title="${s.apply_enabled ? "" : "Automatik ist aus — fährt nicht"}">Jetzt anwenden</button>
             <button id="bed">Privacy-Bett ${s.privacy_bed ? "aus" : "an"}</button>
             <button class="warn" id="clr" ${s.manual_override ? "" : "disabled"} title="${s.manual_override ? "" : "Kein Override aktiv"}">Override löschen</button>
+            <button id="inv" class="${s.invert_position ? "on" : ""}" title="Spiegelt jede Zielposition (0↔100) — bei umgekehrter Fahrtrichtung des Rollos">Achse invertieren: ${s.invert_position ? "an" : "aus"}</button>
           </div>
           <div class="manual">
             <div class="line">
@@ -272,6 +274,7 @@ class BbpApp extends HTMLElement {
     $("apply").onclick = () => this._call("benni_blind_policy/apply_now");
     $("bed").onclick = () => this._call("benni_blind_policy/set_privacy_bed", { enabled: !s.privacy_bed });
     $("clr").onclick = () => this._call("benni_blind_policy/clear_manual_override");
+    $("inv").onclick = () => this._call("benni_blind_policy/set_invert_position", { enabled: !s.invert_position });
     const mpos = $("mpos"), mval = $("mval");
     mpos.oninput = () => { mval.textContent = mpos.value + "%"; };
     $("mgo").onclick = () => this._call("benni_blind_policy/set_manual_position", { position: Number(mpos.value) });

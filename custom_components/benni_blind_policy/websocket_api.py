@@ -30,6 +30,7 @@ from .const import (
     WS_CLEAR_OVERRIDE,
     WS_GET_STATUS,
     WS_SET_APPLY_ENABLED,
+    WS_SET_INVERT_POSITION,
     WS_SET_MANUAL_DECISION,
     WS_SET_MANUAL_POSITION,
     WS_SET_POSITION_PROFILE,
@@ -66,6 +67,7 @@ def _status(hass: HomeAssistant, coord) -> dict[str, Any]:
     return {
         "profile": coord.profile_route,
         "apply_enabled": coord.apply_enabled,
+        "invert_position": coord.invert_position,
         "startup_ready": coord.startup_ready,
         "mode": d.mode if d else None,
         "target_position": d.target_position if d else None,
@@ -152,6 +154,20 @@ def async_setup_websocket_api(hass: HomeAssistant) -> None:
         connection.send_result(msg["id"], _status(hass, coord))
 
     @websocket_api.websocket_command({
+        vol.Required("type"): WS_SET_INVERT_POSITION,
+        vol.Required("enabled"): bool,
+    })
+    @websocket_api.require_admin
+    @websocket_api.async_response
+    async def ws_set_invert_position(hass, connection, msg) -> None:
+        coord = _coordinator(hass)
+        if coord is None:
+            connection.send_error(msg["id"], "not_ready", "Blind Policy not loaded")
+            return
+        await coord.async_set_invert_position(msg["enabled"])
+        connection.send_result(msg["id"], _status(hass, coord))
+
+    @websocket_api.websocket_command({
         vol.Required("type"): WS_SET_PRIVACY_BED,
         vol.Required("enabled"): bool,
     })
@@ -219,7 +235,7 @@ def async_setup_websocket_api(hass: HomeAssistant) -> None:
         connection.send_result(msg["id"], _status(hass, coord))
 
     for cmd in (
-        ws_get_status, ws_apply_now, ws_set_apply_enabled,
+        ws_get_status, ws_apply_now, ws_set_apply_enabled, ws_set_invert_position,
         ws_set_privacy_bed, ws_clear_override, ws_set_position_profile,
         ws_set_manual_position, ws_set_manual_decision,
     ):
