@@ -16,6 +16,7 @@ from homeassistant.helpers import selector
 
 from .const import (
     CONF_APPLY_ENABLED,
+    CONF_BLIND_MASTER,
     CONFIG_ENTRY_VERSION,
     CONF_COVER_ENTITY,
     CONF_INVERT_POSITION,
@@ -44,6 +45,7 @@ _INT = selector.NumberSelector(
 
 # Spezial-Selektoren je Feld (Rest: generischer Entity-Selektor).
 _FIELD_SELECTORS: dict[str, Any] = {
+    CONF_BLIND_MASTER: _ENTITY,
     CONF_COVER_ENTITY: _COVER,
     CONF_SUN: _ENTITY,
     CONF_WINDOW_OPEN: _ENTITY,

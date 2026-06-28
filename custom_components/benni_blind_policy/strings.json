@@ -10,8 +10,9 @@
       },
       "sources": {
         "title": "Quellen verdrahten",
-        "description": "Vorbelegt mit den bekannten Live-Entities des Profils (nur wenn vorhanden). Heat wird in-policy aus Wetterlage + Außentemperatur + Sonnenhöhe berechnet.",
+        "description": "Vorbelegt mit dem Blind Master des Profils (nur wenn vorhanden). Die Policy liest ihre Context- und Gerätefakten aus diesem Master.",
         "data": {
+          "blind_master_entity": "Blind Master",
           "cover_entity": "Rollo (cover)",
           "window_open_entity": "Fenster offen (on = Flügel offen)",
           "bio_state_entity": "Bio-State",
@@ -51,6 +52,7 @@
       "sources": {
         "title": "Quellen",
         "data": {
+          "blind_master_entity": "Blind Master",
           "cover_entity": "Rollo (cover)",
           "window_open_entity": "Fenster offen (on = Flügel offen)",
           "bio_state_entity": "Bio-State",

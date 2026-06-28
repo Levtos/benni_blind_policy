@@ -169,6 +169,7 @@ UPDATE_INTERVAL_SECONDS: Final = 30
 # --------------------------------------------------------------------------- #
 # Config-Keys — Quell-Entities (alle als Entity-IDs aus dem Flow)
 # --------------------------------------------------------------------------- #
+CONF_BLIND_MASTER: Final = "blind_master_entity"
 CONF_COVER_ENTITY: Final = "cover_entity"
 CONF_WINDOW_OPEN: Final = "window_open_entity"        # on = Flügel offen (Status 2)
 CONF_BIO_STATE: Final = "bio_state_entity"
@@ -182,6 +183,9 @@ CONF_GAMING_SOURCE: Final = "gaming_source_entity"
 CONF_WEATHER_CONDITION: Final = "weather_condition_entity"   # R8 (sunny)
 CONF_OUTDOOR_TEMP: Final = "outdoor_temp_entity"            # R8 (≥ 24 °C)
 
+LEGACY_COVER_ENTITY: Final = "cover.living_blackout_blind"
+CORE_COVER_ENTITY: Final = "cover.wohnbereich_thermo_verdunklungsrollo"
+CORE_BLIND_MASTER_ENTITY: Final = "sensor.benni_master_living_rollo"
 LEGACY_WINDOW_OPEN_ENTITY: Final = "binary_sensor.opening_unsafe_for_rollo_combined"
 CORE_WINDOW_OPEN_ENTITY: Final = "sensor.benni_combined_opening_unsafe_for_rollo"
 CORE_OPENINGS_MASTER_ENTITY: Final = "sensor.benni_combined_openings"
@@ -212,7 +216,8 @@ DEFAULT_INVERT_POSITION: Final = False               # Richtung normal (logisch 
 # --------------------------------------------------------------------------- #
 PROFILE_PREFILL: Final[dict[str, dict[str, str]]] = {
     PROFILE_BENNI: {
-        CONF_COVER_ENTITY: "cover.living_blackout_blind",
+        CONF_BLIND_MASTER: CORE_BLIND_MASTER_ENTITY,
+        CONF_COVER_ENTITY: CORE_COVER_ENTITY,
         CONF_WINDOW_OPEN: CORE_OPENINGS_MASTER_ENTITY,
         CONF_BIO_STATE: "sensor.benni_core_state_bio_state",
         CONF_DAY_STATE: "sensor.benni_core_state_day_state",
@@ -229,12 +234,13 @@ PROFILE_PREFILL: Final[dict[str, dict[str, str]]] = {
 }
 
 # Reihenfolge der Quell-Felder im Config-Flow (ein Schritt) + Optionen.
-SOURCE_KEYS: Final = (
+LEGACY_SOURCE_KEYS: Final = (
     CONF_COVER_ENTITY, CONF_WINDOW_OPEN, CONF_BIO_STATE, CONF_DAY_STATE,
     CONF_DAY_CONTEXT, CONF_PRESENCE_HOUSEHOLD, CONF_LUX, CONF_SUN,
     CONF_MEDIA_SCENARIO, CONF_GAMING_SOURCE, CONF_WEATHER_CONDITION,
     CONF_OUTDOOR_TEMP,
 )
+SOURCE_KEYS: Final = (CONF_BLIND_MASTER,)
 OPTION_KEYS: Final = (CONF_APPLY_ENABLED, CONF_STARTUP_BLOCK_SECONDS, CONF_INVERT_POSITION)
 
 # --------------------------------------------------------------------------- #

@@ -37,6 +37,7 @@ except Exception:  # pragma: no cover
 from . import policy
 from .const import (
     CONF_APPLY_ENABLED,
+    CONF_BLIND_MASTER,
     CONF_BIO_STATE,
     CONF_COVER_ENTITY,
     CONF_DAY_CONTEXT,
@@ -144,7 +145,19 @@ class BlindPolicyCoordinator:
         return self._opt(CONF_PROFILE, DEFAULT_PROFILE_ROUTE)
 
     @property
+    def blind_master_entity(self) -> str | None:
+        return self._opt(CONF_BLIND_MASTER)
+
+    def _has_blind_master_state(self) -> bool:
+        eid = self.blind_master_entity
+        return bool(eid) and self.hass.states.get(eid) is not None
+
+    @property
     def cover_entity(self) -> str | None:
+        if self._has_blind_master_state():
+            master_cover = self._master_attr("cover_entity_id")
+            if isinstance(master_cover, str) and master_cover:
+                return master_cover
         return self._opt(CONF_COVER_ENTITY)
 
     @property
@@ -247,16 +260,19 @@ class BlindPolicyCoordinator:
             )
 
         watch: set[str] = set()
-        for key in (
-            CONF_WINDOW_OPEN, CONF_BIO_STATE, CONF_DAY_STATE, CONF_DAY_CONTEXT,
-            CONF_PRESENCE_HOUSEHOLD, CONF_LUX, CONF_SUN, CONF_MEDIA_SCENARIO,
-            CONF_GAMING_SOURCE, CONF_WEATHER_CONDITION, CONF_OUTDOOR_TEMP,
-        ):
-            v = self._opt(key)
-            if isinstance(v, str) and v:
-                watch.add(v)
-        if self.cover_entity:
-            watch.add(self.cover_entity)
+        if self.blind_master_entity:
+            watch.add(self.blind_master_entity)
+        else:
+            for key in (
+                CONF_WINDOW_OPEN, CONF_BIO_STATE, CONF_DAY_STATE, CONF_DAY_CONTEXT,
+                CONF_PRESENCE_HOUSEHOLD, CONF_LUX, CONF_SUN, CONF_MEDIA_SCENARIO,
+                CONF_GAMING_SOURCE, CONF_WEATHER_CONDITION, CONF_OUTDOOR_TEMP,
+            ):
+                v = self._opt(key)
+                if isinstance(v, str) and v:
+                    watch.add(v)
+            if self.cover_entity:
+                watch.add(self.cover_entity)
         if watch:
             self._unsub.append(
                 async_track_state_change_event(self.hass, list(watch), self._on_state_change)
@@ -310,7 +326,7 @@ class BlindPolicyCoordinator:
     @callback
     def _on_state_change(self, event: Event) -> None:
         eid = event.data.get("entity_id")
-        if eid == self.cover_entity:
+        if eid == self.cover_entity or eid == self.blind_master_entity:
             self._detect_manual_override(event)
         self.hass.async_create_task(self.async_evaluate())
 
@@ -346,7 +362,43 @@ class BlindPolicyCoordinator:
         })
 
     # ----- context -----
+    def _master_attr(self, attr: str) -> Any:
+        eid = self._opt(CONF_BLIND_MASTER)
+        if not eid:
+            return None
+        st = self.hass.states.get(eid)
+        if st is None or st.state in ("unknown", "unavailable"):
+            return None
+        return st.attributes.get(attr)
+
     def _read(self, key: str) -> str | None:
+        master_attrs = {
+            CONF_BIO_STATE: "bio_state",
+            CONF_DAY_STATE: "day_state",
+            CONF_DAY_CONTEXT: "day_context",
+            CONF_PRESENCE_HOUSEHOLD: "presence_household",
+            CONF_LUX: "lux",
+            CONF_MEDIA_SCENARIO: "media_scenario",
+            CONF_GAMING_SOURCE: "gaming_source",
+            CONF_WEATHER_CONDITION: "weather_condition",
+            CONF_OUTDOOR_TEMP: "outdoor_temp",
+        }
+        if self._has_blind_master_state():
+            if key == CONF_WINDOW_OPEN:
+                value = self._master_attr("window_open")
+                if isinstance(value, bool):
+                    return "on" if value else "off"
+                opening = self._master_attr("opening_state")
+                if opening in ("closed", "open", "tilted"):
+                    return "on" if opening == "open" else "off"
+                return None
+            attr = master_attrs.get(key)
+            if attr:
+                value = self._master_attr(attr)
+                if value in (None, "", "unknown", "unavailable"):
+                    return None
+                return str(value)
+
         eid = self._opt(key)
         if not eid:
             return None
@@ -361,6 +413,8 @@ class BlindPolicyCoordinator:
         return st.state
 
     def _sun_elevation(self) -> float | None:
+        if self._has_blind_master_state():
+            return _float_or_none(self._master_attr("sun_elevation"))
         eid = self._opt(CONF_SUN)
         if not eid:
             return None
@@ -395,6 +449,8 @@ class BlindPolicyCoordinator:
 
     # ----- cover helpers -----
     def _cover_position(self) -> float | None:
+        if self._has_blind_master_state():
+            return _float_or_none(self._master_attr("current_cover_position"))
         if not self.cover_entity:
             return None
         st = self.hass.states.get(self.cover_entity)
@@ -403,6 +459,11 @@ class BlindPolicyCoordinator:
         return _float_or_none(st.attributes.get("current_position"))
 
     def _cover_moving(self) -> bool:
+        if self._has_blind_master_state():
+            value = self._master_attr("cover_running")
+            if isinstance(value, bool):
+                return value
+            return str(value).lower() in ("on", "true", "1")
         if not self.cover_entity:
             return False
         st = self.hass.states.get(self.cover_entity)
@@ -412,9 +473,14 @@ class BlindPolicyCoordinator:
     def _update_privacy_latch(self, ctx: policy.Context) -> None:
         # Sonnenaufgangs-Flanke (below → above_horizon).
         sun_st = self.hass.states.get(self._opt(CONF_SUN)) if self._opt(CONF_SUN) else None
+        if self._has_blind_master_state():
+            sun_state = self._master_attr("sun_state")
+            sun_st = None
+        else:
+            sun_state = sun_st.state if sun_st is not None else None
         sun_above = None
-        if sun_st is not None and sun_st.state in ("above_horizon", "below_horizon"):
-            sun_above = sun_st.state == "above_horizon"
+        if sun_state in ("above_horizon", "below_horizon"):
+            sun_above = sun_state == "above_horizon"
         sunrise_crossed = bool(self._prev_sun_above is False and sun_above is True)
 
         if not self._privacy_latch:
