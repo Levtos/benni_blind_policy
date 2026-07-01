@@ -18,7 +18,7 @@ Quellen (core_state · core_devices · media_state · DWD)
 ```
 
 - **Decision/Apply getrennt.** `policy.py` ist HA-frei und vollständig pytest-getestet
-  (53 Tests). Der Coordinator hält den persistenten State (Lux-Gate-Hysterese,
+  (72 Tests). Der Coordinator hält den persistenten State (Lux-Gate-Hysterese,
   Privacy-Latch, Override-Warden, Writing-Active-Flag) und wendet gated an.
 - **Kein Cross-Modul-Python-Import.** Quellen werden ausschließlich als HA-Entity-IDs
   aus dem Config-Flow konsumiert (Entity-State-Contracts als Grenze).

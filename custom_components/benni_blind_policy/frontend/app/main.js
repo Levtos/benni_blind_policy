@@ -317,7 +317,7 @@ class BbpApp extends HTMLElement {
             </div>
           </div>
           <div class="mut">${s.manual_explicit
-            ? `Manuell aktiv: ${s.manual_mode ? (MODE_LABEL[s.manual_mode] || s.manual_mode) : (s.manual_target + "%")} — „Override löschen" gibt an die Automatik zurück.`
+            ? `Manuell aktiv: ${s.manual_mode ? (MODE_LABEL[s.manual_mode] || s.manual_mode) : (s.manual_target + "%")} — nächster Sleep oder „Override löschen" gibt an die Automatik zurück.`
             : (s.apply_enabled ? "Automatik steuert das Rollo." : "Shadow: Automatik aus — nur der Manuell-Slider/Modus fährt.")}</div>
           <div class="mut">Blocker: ${(s.blockers || []).join(", ") || "keine"} · Apply erlaubt: ${s.apply_allowed}</div>
           <div class="mut">Cover: ${s.cover?.entity_id || "—"} @ ${s.cover?.current_position ?? "—"}%</div>

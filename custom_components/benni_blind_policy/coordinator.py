@@ -114,8 +114,8 @@ class BlindPolicyCoordinator:
         self._manual_override = False
         self._override_set_ts: float | None = None      # monotonic
         # Expliziter Manual-Override aus dem Panel (Position oder Modus). Hält bis
-        # Tagesphasenwechsel / Fenster-Safety / "Override löschen" — der 5-Min-
-        # Warden-Sweep räumt ihn NICHT (der ist nur für auto-erkannte Eingriffe).
+        # zur nächsten Bio-Sleep-Phase / Fenster-Safety / "Override löschen" — der
+        # 5-Min-Warden-Sweep räumt ihn NICHT (der ist nur für auto-erkannte Eingriffe).
         self._manual_explicit = False
         self._manual_mode: str | None = None
         self._manual_target: int | None = None
@@ -524,7 +524,7 @@ class BlindPolicyCoordinator:
     def _warden_sweep(self) -> None:
         """Periodischer Sweep (Alter>5min via Prädikat gegated)."""
         if self._manual_explicit:
-            return  # expliziter Panel-Override hält bis Tagesphase/Fenster/Clear
+            return  # expliziter Panel-Override hält bis Sleep/Fenster/Clear
         if not self._manual_override or self._override_set_ts is None:
             return
         age = time.monotonic() - self._override_set_ts
@@ -533,21 +533,15 @@ class BlindPolicyCoordinator:
             self._manual_override = False
             self._override_set_ts = None
 
-    def _reset_override_on_dayphase(self, ctx: policy.Context) -> None:
-        """R-MO: Override löst sich beim Day-State-Wechsel (vor _update_privacy_latch
-        gemerkt — daher hier eigener Vergleich gegen den noch alten prev).
+    def _reset_override_on_sleep(self, ctx: policy.Context) -> None:
+        """R-MO: Override löst sich beim Eintritt in die nächste Bio-Sleep-Phase.
 
-        REVIEW (Live): ``self._prev_day_state`` wird von ZWEI Stellen gelesen/geschrieben
-        — hier (Vergleich gegen den Vorzyklus-Wert) und in ``_update_privacy_latch``
-        (Fortschreiben). Die Reihenfolge in ``async_evaluate`` (Reset VOR Latch-Update)
-        ist bewusst so. Falls beim Live-Test der Override nach einem Tagesphasen-Wechsel
-        nicht sauber löst, ist diese Ordering-Kopplung die erste Stelle zum Anschauen.
+        Der Reset läuft vor ``_update_privacy_latch``, solange ``self._prev_bio`` noch
+        den Vorzyklus-Wert enthält. Dadurch kann die Sleep-Entscheidung im selben
+        Evaluate direkt wieder anwenden.
         """
-        if (
-            self._manual_override
-            and ctx.day_state is not None
-            and self._prev_day_state is not None
-            and ctx.day_state != self._prev_day_state
+        if self._manual_override and policy.manual_override_should_reset_on_sleep(
+            ctx.bio_state, self._prev_bio
         ):
             self._clear_manual_state()
 
@@ -563,9 +557,9 @@ class BlindPolicyCoordinator:
     async def async_evaluate(self) -> policy.Decision:
         ctx = self.build_context()
 
-        # Override-Reset bei Tagesphasen-Wechsel (vor Latch-Update, das prev_day_state
+        # Override-Reset beim Eintritt in Bio-Sleep (vor Latch-Update, das prev_bio
         # fortschreibt) + periodischer Sweep.
-        self._reset_override_on_dayphase(ctx)
+        self._reset_override_on_sleep(ctx)
         self._warden_sweep()
 
         # Privacy-Latch aktualisieren (schreibt prev_day_state/prev_bio/sun fort).

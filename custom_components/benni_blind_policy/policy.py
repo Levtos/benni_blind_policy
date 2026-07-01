@@ -398,6 +398,18 @@ def privacy_latch_should_reset(
     return bool(sunrise_crossed) or bio_woke
 
 
+def manual_override_should_reset_on_sleep(
+    bio_state: str | None,
+    prev_bio_state: str | None,
+) -> bool:
+    """Reset active manual override when a new sleep bio phase starts."""
+    return (
+        prev_bio_state is not None
+        and prev_bio_state != BIO_SLEEP
+        and bio_state == BIO_SLEEP
+    )
+
+
 # --------------------------------------------------------------------------- #
 # R-OW — Override-Warden-Prädikate (Coordinator hält die Timer)
 # --------------------------------------------------------------------------- #

@@ -410,6 +410,27 @@ def test_latch_no_reset_while_sleeping():
     assert policy.privacy_latch_should_reset(const.BIO_SLEEP, const.BIO_SLEEP, False) is False
 
 
+def test_manual_override_reset_on_sleep_entry():
+    assert policy.manual_override_should_reset_on_sleep(
+        const.BIO_SLEEP, const.BIO_AWAKE
+    ) is True
+    assert policy.manual_override_should_reset_on_sleep(
+        const.BIO_SLEEP, const.BIO_WAKING
+    ) is True
+
+
+def test_manual_override_no_reset_without_sleep_entry():
+    assert policy.manual_override_should_reset_on_sleep(
+        const.BIO_SLEEP, const.BIO_SLEEP
+    ) is False
+    assert policy.manual_override_should_reset_on_sleep(
+        const.BIO_AWAKE, const.BIO_SLEEP
+    ) is False
+    assert policy.manual_override_should_reset_on_sleep(
+        const.BIO_SLEEP, None
+    ) is False
+
+
 # --------------------------------------------------------------------------- #
 # R-OW — Override-Warden-Prädikate
 # --------------------------------------------------------------------------- #
