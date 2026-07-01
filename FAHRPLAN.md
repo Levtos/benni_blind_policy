@@ -44,10 +44,10 @@
 
 ## Review-Punkte (beim Live-Test gezielt prüfen)
 
-- [ ] **Override-Reset-Ordering (R-MO):** `_prev_day_state` wird in `coordinator.py` von zwei
-      Stellen gelesen/geschrieben — `_reset_override_on_dayphase` (Vergleich) und
-      `_update_privacy_latch` (Fortschreiben), Reset bewusst VOR Latch-Update. Funktional
-      korrekt, aber subtil. Wenn ein Override nach Tagesphasen-Wechsel nicht löst → hier ansetzen.
+- [ ] **Override-Reset-Ordering (R-MO):** Manual-Override loest sich beim naechsten
+      Bio-State-Eintritt `sleep`. `_reset_override_on_sleep` muss bewusst VOR
+      `_update_privacy_latch` laufen, damit `_prev_bio` noch den Vorzyklus-Wert haelt
+      und die Sleep-Entscheidung im selben Evaluate wieder anwenden kann.
 - [ ] **Window-Contract-Semantik:** R1 verlangt „Flügel offen (Status 2)", NICHT Kipp (Status 1).
       Prüfen, ob `binary_sensor.opening_unsafe_for_rollo_combined` exakt das meint (Kipp ausschließt).
       Falls nicht → tilt-ausschließendes Wing-Open-Combined in FLEET-54 anlegen (siehe dort).
