@@ -113,6 +113,11 @@ class BlindPolicyCoordinator:
         self._alarm_wakeup = False
         self._manual_override = False
         self._override_set_ts: float | None = None      # monotonic
+        # Letzte im STILLSTAND beobachtete Cover-Position (Baseline). Ein Override
+        # wird nur gesetzt, wenn sich die Ruheposition real ändert — Master-
+        # Attribut-Churn (gleiche Position) und die erste Beobachtung nach einem
+        # Neustart (Baseline None) lösen bewusst KEINEN Override aus.
+        self._rest_pos: float | None = None
         # Expliziter Manual-Override aus dem Panel (Position oder Modus). Hält bis
         # zur nächsten Bio-Sleep-Phase / Fenster-Safety / "Override löschen" — der
         # 5-Min-Warden-Sweep räumt ihn NICHT (der ist nur für auto-erkannte Eingriffe).
@@ -469,6 +474,23 @@ class BlindPolicyCoordinator:
         st = self.hass.states.get(self.cover_entity)
         return bool(st and st.state in ("opening", "closing"))
 
+    @staticmethod
+    def _state_cover_position(state: Any) -> float | None:
+        """Gemeldete Cover-Position aus einem State-Objekt (Master ODER Roh-Cover).
+
+        Der Master exponiert ``current_cover_position``, ein roher Cover
+        ``current_position``. ``None`` bei fehlendem/unbrauchbarem State — so
+        lässt sich eine echte Positionsänderung von reinem Attribut-Churn
+        (Lux/Bio/Sonne ändern sich, Position bleibt) unterscheiden.
+        """
+        if state is None or getattr(state, "state", None) in ("unknown", "unavailable"):
+            return None
+        attrs = getattr(state, "attributes", {}) or {}
+        for attr in ("current_cover_position", "current_position"):
+            if attr in attrs:
+                return _float_or_none(attrs.get(attr))
+        return None
+
     # ----- R-PL Privacy-Latch -----
     def _update_privacy_latch(self, ctx: policy.Context) -> None:
         # Sonnenaufgangs-Flanke (below → above_horizon).
@@ -499,27 +521,58 @@ class BlindPolicyCoordinator:
 
     # ----- R-MO / R-OW Manual-Override + Warden -----
     @callback
-    def _detect_manual_override(self, _event: Event) -> None:
-        """Cover-State-Change außerhalb unseres Schreibfensters = Hand-Eingriff."""
-        now = time.monotonic()
-        if self._writing_active:
-            return
-        if (now - self._last_apply_ts) <= RECENT_APPLY_GUARD_SECONDS:
-            return  # eigener Nachlauf-Echo
+    def _detect_manual_override(self, event: Event) -> None:
+        """Reale Cover-Positions-Änderung im Stillstand = Hand-Eingriff.
+
+        WICHTIG: Nur eine tatsächlich veränderte *Ruheposition* des Covers zählt.
+        Der Blind-Master (``sensor.benni_master_living_rollo``) aktualisiert seine
+        Attribute laufend (Lux/Bio/Sonne …), während ``.state`` „ready" bleibt —
+        jedes dieser Events triggert ``_on_state_change``. Ohne Positions-Baseline
+        würde solcher Attribut-Churn fälschlich als manueller Eingriff gewertet
+        (FLEET: WZ-Rollo hing 18 h auf 40 %, weil ein Nacht-Churn nach Neustart
+        den Override setzte, obwohl das Rollo unbewegt stand und nichts geschrieben
+        wurde — ``_last_target`` war None, ``at_target`` daher dauerhaft False).
+        Der Override ist per Konzept ausschließlich echter User-Bedienung
+        vorbehalten; die Policy darf ihn nie selbst aus Attribut-Rauschen setzen.
+
+        Verglichen wird gegen die letzte im Stillstand gesehene Position
+        (``_rest_pos``), nicht gegen das unmittelbare Vor-Event — so überlebt die
+        Erkennung die mehrfachen Zwischen-Emissionen des Masters während einer Fahrt.
+        """
+        new_pos = self._state_cover_position(event.data.get("new_state"))
+        if new_pos is None:
+            return  # keine brauchbare Position (unavailable/unknown) — nicht bewertbar
         if self._cover_moving():
-            return  # Bewegung wird erst beim Stillstand bewertet
+            return  # Bewegung wird erst im Stillstand bewertet; Baseline hält
+        now = time.monotonic()
+        # Eigener Schreibvorgang bzw. dessen Nachlauf-Echo: Baseline auf das Ist
+        # nachziehen, aber niemals einen Override setzen.
+        if self._writing_active or (now - self._last_apply_ts) <= RECENT_APPLY_GUARD_SECONDS:
+            self._rest_pos = new_pos
+            return
+        baseline = self._rest_pos
+        self._rest_pos = new_pos
+        # Erste Ruhe-Beobachtung (Baseline None, z. B. nach Neustart) ODER
+        # unveränderte Ruheposition (reiner Churn) → kein Hand-Eingriff.
+        if baseline is None or new_pos == baseline:
+            return
         if self._manual_override:
             return
-        # Neuer Override — Sofortprüfung des Wardens (Race-Echo / schon auf Ziel).
+        # Reale, fremde Positions-Änderung — Warden-Sofortprüfung (Race-Echo / Ziel).
         writing_recently_off = (
             self._writing_off_ts is not None
             and (now - self._writing_off_ts) <= WARDEN_RACE_ECHO_SECONDS
         )
-        at_target = policy.position_within_tolerance(self._cover_position(), self._last_target)
+        at_target = policy.position_within_tolerance(new_pos, self._last_target)
         if policy.override_warden_immediate_clear(writing_recently_off, at_target):
             return  # false-positive — gar nicht erst setzen
         self._manual_override = True
         self._override_set_ts = now
+        _LOGGER.debug(
+            "blind_policy: manual override detected — cover moved %s%% -> %s%% "
+            "(last_target=%s, entity=%s)",
+            baseline, new_pos, self._last_target, event.data.get("entity_id"),
+        )
 
     def _warden_sweep(self) -> None:
         """Periodischer Sweep (Alter>5min via Prädikat gegated)."""
@@ -605,6 +658,7 @@ class BlindPolicyCoordinator:
         if current is not None and abs(current - target) < 1:
             return
         self._last_target = target
+        self._rest_pos = target       # eigene Fahrt setzt die Ruhe-Baseline (kein Selbst-Override)
         self._last_apply_ts = time.monotonic()
         self._set_writing_active(True)
         try:
