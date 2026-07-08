@@ -363,4 +363,6 @@ class BbpApp extends HTMLElement {
   }
 }
 
-customElements.define("bbp-app", BbpApp);
+if (!customElements.get("bbp-app")) {
+  customElements.define("bbp-app", BbpApp);
+}
