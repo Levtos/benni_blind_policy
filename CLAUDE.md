@@ -1,5 +1,22 @@
 # CLAUDE.md — Blind Policy
 
+## GitLab Workflow
+
+- GitLab project `ha-platform/control` is the central workflow truth.
+- Relevant work requires a GitLab issue in `ha-platform/control`.
+- Before work starts, read the issue description and all issue notes.
+- Document current state, decisions, scope changes, tests, commits, merge requests, blockers, and completion in the issue.
+- Code changes happen in the matching GitLab repository. `origin` must point to GitLab.
+- GitHub is only the public distribution and HACS mirror. Do not develop directly on GitHub and do not push manually to GitHub.
+- Plane and Forgejo are historical sources only and are not used for active work.
+- Full rules live in `ha-platform/control/AGENTS.md`, `ha-platform/control/CLAUDE.md`, and `ha-platform/control/docs/workflow/`.
+
+## Safety
+
+- Do not put secrets in issues, commits, logs, or reports.
+- Do not touch production Home Assistant systems without explicit approval.
+- No admin, delete, runner, or bulk actions without explicit approval.
+
 **Status:** v0.1.0 Erstbau. Backend + Pure-Logic-Tests grün, Live-Verify offen.
 **Letzte Aktualisierung:** 2026-06-13
 
@@ -47,5 +64,5 @@ geschrieben nach dem reviewten Lastenheft. Berechnet stateless den Rollo-Modus
 
 - `D:\Dokumente\GitHub\CLAUDE.md` — Fleet-Orientierung
 - `einhornzentrale/docs/lastenhefte/reviewed/rollo/` — Lastenheft (führend)
-- FLEET-Board (Plane, Projekt FLEET) — Live-Status; FLEET-11 + Child-Cards 56-61
+- Historical FLEET/Plane note only: FLEET-11 + child cards 56-61. Active workflow now lives in GitLab `ha-platform/control`.
 - `codex.md` — Codex-Pendant
