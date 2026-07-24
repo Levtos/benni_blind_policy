@@ -73,3 +73,13 @@ geschrieben nach dem reviewten Lastenheft. Berechnet stateless den Rollo-Modus
 - `einhornzentrale/docs/lastenhefte/reviewed/rollo/` — Lastenheft (führend)
 - Historical FLEET/Plane note only: FLEET-11 + child cards 56-61. Active workflow now lives in GitLab `ha-platform/control`.
 - `codex.md` — Codex-Pendant
+
+## UX-Frontend-Standard (verbindlich)
+
+Für jede UX-/Frontend-Arbeit gilt der verbindliche, fleet-weite UX-, Technologie- und
+Designstandard. Kanonische Quelle: ADR `ha-platform/control:docs/adr/0001-ux-frontend-standard.md`
+(Issue `control#58`). Kurzform: Svelte 5 · Vite · TypeScript · Bits UI · shadcn-svelte ·
+Tailwind · CSS Custom Properties · Lucide; Design "Graphite Dark – semantic accent system";
+zentrale UX = statisches Bundle + dünnes UX-Gateway (primär HA-Ingress); versionierte/typisierte
+Contracts. Details und Abweichungsprozess: `docs/ux-frontend-standard.md` und das ADR. Bestehende
+Regeln werden dadurch ergänzt, nie überschrieben oder entfernt.
