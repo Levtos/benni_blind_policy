@@ -141,12 +141,12 @@ GATE_DAY_STATES: Final = frozenset(
 
 HEAT_TEMP_C: Final = 24               # Temperaturklasse ≥ 12 ≙ ≥ 24 °C
 HEAT_SUN_MIN_DEG: Final = 5           # Heat Sonnenhöhe > 5°
-# Heat-Trigger über LOKALE Helligkeit statt DWD-Textlage: die Garten-Lux beweisen
-# die reale Sonnenlast direkt. Die alte harte `weather_condition == "sunny"`-Pflicht
-# feuerte nie, weil DWD an heißen, hellen Tagen fast durchgehend `partlycloudy`
-# meldet (live 2026-08-04: 37 °C, 73k lx, Sonne 51° → Heat blieb aus). Schwelle
-# = Glare-Gate-Open (20k lx = „direkte Sonne").
-HEAT_LUX_MIN: Final = 20000           # Heat ab ≥ 20.000 lx (Sunny-Proxy, lokal)
+# Heat-Trigger: Temperatur + Sonnenhöhe sind ausschlaggebend (Sonne im Sommer bis
+# ~16:00 = Elevation > 5°). Lux ist nur ein niedriger „nicht dunkel"-Floor gegen
+# echte Bewölkung/Nacht — NICHT der harte 20k-Gate von zuvor (der blockierte an
+# hellen Hitzetagen zu oft, live 2026-08-04: 17.7k lx bei 35 °C → Heat blieb aus).
+# Der Floor ist per Config/Panel frei einstellbar (0 = nur Temp+Sonne).
+DEFAULT_HEAT_LUX_MIN: Final = 10000   # Default-Floor; live editierbar via CONF_HEAT_LUX_MIN
 # Heat endet mit afternoon — fällt weg, sobald early_evening beginnt (User 2026-06-27:
 # early_evening war zu lang). Phasen-Mengentest, keine Uhrzeit.
 HEAT_DAY_STATES: Final = frozenset(
@@ -200,6 +200,7 @@ CORE_WINDOW_OPEN_ATTRIBUTE: Final = "living"
 # Options.
 CONF_APPLY_ENABLED: Final = "apply_enabled"
 CONF_STARTUP_BLOCK_SECONDS: Final = "startup_block_seconds"
+CONF_HEAT_LUX_MIN: Final = "heat_lux_min"            # Heat-Lux-Floor (0 = nur Temp+Sonne)
 CONF_POSITION_PROFILE: Final = "position_profile"    # dict mode -> position (Normal-Achse)
 CONF_POSITION_PROFILE_INVERTED: Final = "position_profile_inverted"  # dict mode -> position (Invert-Achse)
 CONF_INVERT_POSITION: Final = "invert_position"      # True = invertiertes Profil aktiv
@@ -307,6 +308,7 @@ WS_SET_MANUAL_POSITION: Final = f"{DOMAIN}/set_manual_position"
 WS_SET_MANUAL_DECISION: Final = f"{DOMAIN}/set_manual_decision"
 WS_SET_INVERT_POSITION: Final = f"{DOMAIN}/set_invert_position"
 WS_RESET_POSITION_PROFILE: Final = f"{DOMAIN}/reset_position_profile"
+WS_SET_HEAT_LUX_MIN: Final = f"{DOMAIN}/set_heat_lux_min"
 
 # Modi, die im Panel manuell als Decision erzwingbar sind (window_open bleibt
 # absolut/safety-only, alarm_wakeup ist Platzhalter, open_weekday/-weekend sind

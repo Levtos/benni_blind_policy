@@ -130,6 +130,12 @@ button.tiny.off { background:#3a2d33; border-color:#f7768e55; color:#f7768e; }
 .ppcell input[type=number]:focus { outline:none; border-color:#7aa2f7; }
 .ppcell .pct { font-size:10px; color:#565f89; }
 .rowedit { padding:3px 7px; font-size:13px; line-height:1; }
+.luxedit { display:inline-flex; align-items:center; gap:4px; margin-top:2px; }
+.luxedit input[type=number] { width:66px; background:#24283b; color:#c0caf5; border:1px solid #2a2e42;
+  border-radius:6px; padding:2px 5px; font-size:11px; text-align:right; }
+.luxedit input[type=number]:focus { outline:none; border-color:#7aa2f7; }
+.luxedit button { padding:2px 7px; font-size:11px; line-height:1; }
+.luxedit .u { color:#565f89; }
 .resetbox { display:flex; align-items:center; justify-content:space-between; gap:10px;
   margin-top:12px; border-top:1px solid #2a2e42; padding-top:10px; }
 .resetbox .note { flex:1; }
@@ -188,35 +194,42 @@ class BbpApp extends HTMLElement {
     const inv = !!s.invert_position;
     const pp = s.position_profile || {};
     const ppi = s.position_profile_inverted || {};
+    const thr = s.thresholds || {};
     const winRule = (s.trace || []).find((e) => e.matched);
-    const cond = ruleConditions(s.thresholds);
+    const cond = ruleConditions(thr);
+    // R5 (heat) bekommt statt statischem Bedingungstext ein editierbares Lux-Floor-
+    // Feld: Temp+Sonne+Tagphase sind fix, nur der „nicht dunkel"-Floor ist einstellbar
+    // (0 = rein Temp+Sonne). Der _isEditing()-Guard schützt die Eingabe vor dem Poll.
+    const heatCond = (t) =>
+      `≥ <span class="luxedit"><input type="number" id="heatlux" min="0" step="500" value="${t.heat_lux_min ?? 10000}"><span class="u">lx</span>`
+      + `<button id="heatlux_save" title="Lux-Floor speichern (0 = nur Temp+Sonne)">✎</button></span>`
+      + ` + ≥ ${t.heat_temp_c ?? "?"} °C + Sonne > ${t.heat_sun_min_deg ?? "?"}° + late_morning..afternoon`;
     const trace = (s.trace || []).map((e) => {
       const m = RULE_LABEL[e.rule] || e.mode;
       const isWin = winRule && e.rule === winRule.rule;
       const nv = pp[m], iv = ppi[m];
       const nAct = (!inv && isWin) ? "cellact" : "";
       const iAct = (inv && isWin) ? "cellact" : "";
+      const condHtml = e.rule === "R5" ? heatCond(thr) : (cond[e.rule] || "");
       return `<div class="trow ${isWin ? "win" : ""}">
         <span class="dot ${isWin ? "win" : e.matched ? "true" : ""}"></span>
         <span class="rid">${e.rule}</span>
-        <div class="nmwrap"><span class="nm">${m}${isWin ? ` <span class="aktiv">AKTIV</span>` : ""}</span><span class="cond">${cond[e.rule] || ""}</span></div>
+        <div class="nmwrap"><span class="nm">${m}${isWin ? ` <span class="aktiv">AKTIV</span>` : ""}</span><span class="cond">${condHtml}</span></div>
         <span class="ppcell ${nAct}"><input type="number" min="0" max="100" step="5" id="n_${m}" value="${nv ?? ""}"><span class="pct">%</span></span>
         <span class="ppcell ${iAct}"><input type="number" min="0" max="100" step="5" id="i_${m}" value="${iv ?? ""}"><span class="pct">%</span></span>
         <button class="rowedit" id="e_${m}" title="Zeile speichern">✎</button>
       </div>`;
     }).join("");
-
-    const thr = s.thresholds || {};
     const inputs = [
       ["Außenhelligkeit", c.lux != null ? c.lux + " lx" : "—",
-        thr.gate_open_lux ? `Lux-Gate: > ${fmtK(thr.gate_open_lux)} auf / < ${fmtK(thr.gate_close_lux)} zu` : ""],
+        thr.gate_open_lux ? `Gate: > ${fmtK(thr.gate_open_lux)} auf / < ${fmtK(thr.gate_close_lux)} zu · Heat-Floor: ${thr.heat_lux_min != null ? (thr.heat_lux_min > 0 ? "≥ " + fmtK(thr.heat_lux_min) : "aus") : "?"}` : ""],
       ["Day State", c.day_state || "—", ""],
       ["Day Context", c.day_context || "—", ""],
       ["Media Scenario", c.media_scenario || "—", "TV/Streaming/Gaming → Glare (mit Lux-Gate)"],
       ["Gaming Source", c.gaming_source || "—", "pc → glare_pc, sonst glare_tv"],
       ["Sonnenhöhe", c.sun_elevation != null ? c.sun_elevation + "°" : "—",
         thr.gate_sun_min_deg ? `> ${thr.gate_sun_min_deg}° für Gate & Heat` : ""],
-      ["Wetterlage", c.weather_condition || "—", "sunny nötig für Heat"],
+      ["Wetterlage", c.weather_condition || "—", "nur Info — Heat nutzt Temp+Sonne+Lux"],
       ["Außentemperatur", c.outdoor_temp != null ? c.outdoor_temp + " °C" : "—",
         thr.heat_temp_c ? `Heat ab ≥ ${thr.heat_temp_c} °C` : ""],
       ["Bio-State", c.bio_state || "—", ""],
@@ -355,6 +368,12 @@ class BbpApp extends HTMLElement {
     });
     const reset = $("ppreset");
     if (reset) reset.onclick = () => this._call("benni_blind_policy/reset_position_profile");
+    const hlSave = $("heatlux_save");
+    if (hlSave) hlSave.onclick = () => {
+      const el = $("heatlux");
+      if (el && el.value !== "")
+        this._call("benni_blind_policy/set_heat_lux_min", { lux: Math.max(0, Math.round(Number(el.value))) });
+    };
     const copy = $("dbgcopy");
     if (copy) copy.onclick = () => { try { navigator.clipboard.writeText(debug); copy.textContent = "✓ Kopiert"; } catch (_) {} };
   }
