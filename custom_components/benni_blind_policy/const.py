@@ -141,6 +141,12 @@ GATE_DAY_STATES: Final = frozenset(
 
 HEAT_TEMP_C: Final = 24               # Temperaturklasse ≥ 12 ≙ ≥ 24 °C
 HEAT_SUN_MIN_DEG: Final = 5           # Heat Sonnenhöhe > 5°
+# Heat-Trigger über LOKALE Helligkeit statt DWD-Textlage: die Garten-Lux beweisen
+# die reale Sonnenlast direkt. Die alte harte `weather_condition == "sunny"`-Pflicht
+# feuerte nie, weil DWD an heißen, hellen Tagen fast durchgehend `partlycloudy`
+# meldet (live 2026-08-04: 37 °C, 73k lx, Sonne 51° → Heat blieb aus). Schwelle
+# = Glare-Gate-Open (20k lx = „direkte Sonne").
+HEAT_LUX_MIN: Final = 20000           # Heat ab ≥ 20.000 lx (Sunny-Proxy, lokal)
 # Heat endet mit afternoon — fällt weg, sobald early_evening beginnt (User 2026-06-27:
 # early_evening war zu lang). Phasen-Mengentest, keine Uhrzeit.
 HEAT_DAY_STATES: Final = frozenset(

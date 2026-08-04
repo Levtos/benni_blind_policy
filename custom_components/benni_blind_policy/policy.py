@@ -5,7 +5,7 @@ Implementiert das reviewte Lastenheft
 
   * ``lux_gate()``     — Schmitt-Trigger (20k/15k) mit Sonnenhöhe + Tagesphasen-Gate,
                          zustandsbehaftet via ``prev_gate`` (Hysterese hält der Coordinator).
-  * ``evaluate_chain()`` — stateless Prioritätskette (R1..R11), liefert Gewinner + Trace.
+  * ``evaluate_chain()`` — stateless Prioritätskette (R1..R9), liefert Gewinner + Trace.
   * ``decide()``       — Kette + Gating-Overlay (apply_enabled/startup/override/source).
   * Privacy-Latch- und Override-Warden-Prädikate (R-PL / R-OW) als pure Helfer,
     die der Coordinator mit seinem persistenten State füttert.
@@ -25,8 +25,6 @@ from .const import (
     BIO_AWAKE,
     BIO_SLEEP,
     BIO_WAKING,
-    DAY_CONTEXT_FREI,
-    DAY_CONTEXT_WERKTAG,
     DAY_CONTEXT_WOCHENENDE,
     DEFAULT_POSITION_PROFILE,
     GAMING_PC,
@@ -36,6 +34,7 @@ from .const import (
     GATE_OPEN_LUX,
     GATE_SUN_MIN_DEG,
     HEAT_DAY_STATES,
+    HEAT_LUX_MIN,
     HEAT_SUN_MIN_DEG,
     HEAT_TEMP_C,
     HOUSEHOLD_EMPTY,
@@ -51,13 +50,9 @@ from .const import (
     MODE_PRIVACY_BED,
     MODE_SLEEP,
     MODE_WINDOW_OPEN,
-    OPEN_WEEKDAY_MIN_MINUTES,
-    OPEN_WEEKEND_MIN_MINUTES,
     PHASE_EARLY_MORNING,
     PHASE_EARLY_NIGHT,
-    PHASE_FORENOON,
     PHASE_LATE_EVENING,
-    PHASE_LATE_MORNING,
     PHASE_LATE_NIGHT,
     PRIVACY_LATCH_LUX,
     SCENARIO_GAMING,
@@ -66,7 +61,6 @@ from .const import (
     SCENARIO_TV,
     WARDEN_POSITION_TOLERANCE,
     WARDEN_SWEEP_MIN_AGE_SECONDS,
-    WEATHER_SUNNY,
 )
 
 # Glare-Szenarien, in denen der TV-Stack blendet (TV/Streaming/Gaming außer PC).
@@ -211,9 +205,18 @@ def lux_gate(
 # Prioritätskette (Lastenheft §4.1 / §5)
 # --------------------------------------------------------------------------- #
 def _heat_active(n: _Norm) -> bool:
-    """Direkter Sonnenschutz, in-policy aus Rohdaten (kein Lux-Gate)."""
+    """Direkter Sonnenschutz, in-policy aus Rohdaten.
+
+    Trigger über LOKALE Helligkeit (``lux`` ≥ HEAT_LUX_MIN) statt DWD-Textlage —
+    die alte harte ``weather_condition == "sunny"``-Pflicht feuerte praktisch nie,
+    weil DWD an heißen, hellen Tagen fast durchgehend ``partlycloudy`` meldet. Lux
+    ist die lokale Wahrheit der Sonnenlast; ein wirklich bedeckter Tag fällt über
+    die Lux-Schwelle raus. Temperatur, Sonnenhöhe und Tagesphasen-Fenster bleiben
+    unverändert harte Bedingungen. Kein Schmitt-Lux-Gate (das ist Glare-only).
+    """
     return (
-        n.weather_condition == WEATHER_SUNNY
+        n.lux is not None
+        and n.lux >= HEAT_LUX_MIN
         and n.outdoor_temp is not None
         and n.outdoor_temp >= HEAT_TEMP_C
         and n.sun_elevation is not None
@@ -239,33 +242,31 @@ def evaluate_chain(n: _Norm, gate_on: bool) -> tuple[RuleEval, list[RuleEval]]:
     Window-open ist hier nur als regulärer Ketten-Top abgebildet; die Absolut-
     Semantik (Override ignorieren) macht ``decide`` im Gating-Overlay.
     """
-    nm = n.now_minutes
     rules: list[tuple[str, str, bool]] = [
         ("R1", MODE_WINDOW_OPEN, n.window_open),
         ("R2", MODE_PRIVACY_BED, n.privacy_bed),
         ("R3", MODE_PRIVACY, n.presence_household == HOUSEHOLD_EMPTY or n.privacy_latch),
         ("R4", MODE_ALARM_WAKEUP, n.alarm_wakeup),
         ("R5", MODE_HEAT, _heat_active(n)),
-        ("R6", MODE_OPEN_WEEKDAY,
-         n.day_state == PHASE_LATE_MORNING
-         and n.day_context == DAY_CONTEXT_WERKTAG
-         and nm is not None and nm >= OPEN_WEEKDAY_MIN_MINUTES),
-        ("R7", MODE_OPEN_WEEKEND,
-         n.day_state == PHASE_FORENOON
-         and n.day_context in (DAY_CONTEXT_WOCHENENDE, DAY_CONTEXT_FREI)
-         and nm is not None and nm >= OPEN_WEEKEND_MIN_MINUTES),
-        ("R8", MODE_SLEEP, _sleep_active(n)),
-        ("R9", MODE_GLARE_TV,
+        # Sleep folgt dem Wake-Planner (bio_state), nicht der Uhr: solange bio == sleep
+        # bzw. Nachtphase gilt, hält Sleep das Rollo zu; sobald bio auf waking/awake
+        # kippt, fällt die Kette (bei sonst nichts Aktivem) auf R9 open — bio-getrieben,
+        # nicht zeitgetrieben. Die früheren zeitgebundenen Öffner open_weekday/-weekend
+        # (fixe Uhrzeit 08:00/09:30) sind ENTFERNT: Altlast aus der Zeit vor dem
+        # Wake-Planner, die den echten Schlaf nach reiner Uhr aufriss. Das Öffnen am
+        # Morgen macht jetzt der Bio-Übergang.
+        ("R6", MODE_SLEEP, _sleep_active(n)),
+        ("R7", MODE_GLARE_TV,
          gate_on
          and n.media_scenario in TV_GLARE_SCENARIOS
          and n.gaming_source != GAMING_PC
          and n.bio_state != BIO_SLEEP),
-        ("R10", MODE_GLARE_PC,
+        ("R8", MODE_GLARE_PC,
          gate_on
          and n.media_scenario == SCENARIO_GAMING
          and n.gaming_source == GAMING_PC
          and n.bio_state != BIO_SLEEP),
-        ("R11", MODE_OPEN, True),  # Fallback — trifft immer zu
+        ("R9", MODE_OPEN, True),  # Fallback — trifft immer zu
     ]
 
     trace: list[RuleEval] = []
