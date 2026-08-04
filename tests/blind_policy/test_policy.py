@@ -117,37 +117,39 @@ def test_alarm_wakeup_prio3():
     assert d.target_position == 100
 
 
-def test_open_weekday_after_8():
+# Öffnen am Morgen ist jetzt bio-getrieben (Wake-Planner), nicht mehr zeitgebunden:
+# die fixen open_weekday/-weekend-Regeln (08:00/09:30) sind entfernt. Wach + sonst
+# nichts aktiv → Fallback open; noch schlafend → sleep hält zu, egal welche Uhrzeit.
+def test_awake_morning_workday_is_open_not_timed_rule():
+    # late_morning werktag, wach → kein fixer Zeit-Öffner mehr → Fallback open.
     d = decide(ctx(day_state=const.PHASE_LATE_MORNING,
-                   day_context=const.DAY_CONTEXT_WERKTAG, now_minutes=8 * 60))
-    assert d.mode == const.MODE_OPEN_WEEKDAY
-
-
-def test_open_weekday_before_8_falls_through():
-    # 07:59, late_morning werktag → R5 greift NICHT; bio awake → fällt auf open.
-    d = decide(ctx(day_state=const.PHASE_LATE_MORNING,
-                   day_context=const.DAY_CONTEXT_WERKTAG, now_minutes=7 * 60 + 59))
+                   day_context=const.DAY_CONTEXT_WERKTAG,
+                   now_minutes=8 * 60 + 30, bio_state=const.BIO_AWAKE))
     assert d.mode == const.MODE_OPEN
 
 
-def test_open_weekday_beats_sleep():
-    # late_morning werktag 08:30, aber bio sleep → R5 schlägt R7 (natürlicher Wecker).
+def test_sleep_holds_in_morning_workday():
+    # Gleiche Zeit, aber bio sleep → Sleep hält das Rollo zu (kein Uhr-Öffner).
     d = decide(ctx(day_state=const.PHASE_LATE_MORNING,
                    day_context=const.DAY_CONTEXT_WERKTAG,
                    now_minutes=8 * 60 + 30, bio_state=const.BIO_SLEEP))
-    assert d.mode == const.MODE_OPEN_WEEKDAY
+    assert d.mode == const.MODE_SLEEP
 
 
-def test_open_weekend_forenoon_after_930_frei():
+def test_sleep_holds_in_weekend_forenoon():
+    # forenoon frei, spät vormittags, aber bio sleep → Sleep hält (kein 09:30-Öffner).
     d = decide(ctx(day_state=const.PHASE_FORENOON,
-                   day_context=const.DAY_CONTEXT_FREI, now_minutes=9 * 60 + 30))
-    assert d.mode == const.MODE_OPEN_WEEKEND
+                   day_context=const.DAY_CONTEXT_FREI,
+                   now_minutes=10 * 60, bio_state=const.BIO_SLEEP))
+    assert d.mode == const.MODE_SLEEP
 
 
-def test_open_weekend_wochenende_equiv_frei():
+def test_awake_weekend_forenoon_is_open():
+    # forenoon wochenende, wach → Fallback open (kein zeitgebundener Öffner).
     d = decide(ctx(day_state=const.PHASE_FORENOON,
-                   day_context=const.DAY_CONTEXT_WOCHENENDE, now_minutes=10 * 60))
-    assert d.mode == const.MODE_OPEN_WEEKEND
+                   day_context=const.DAY_CONTEXT_WOCHENENDE,
+                   now_minutes=10 * 60, bio_state=const.BIO_AWAKE))
+    assert d.mode == const.MODE_OPEN
 
 
 def test_sleep_bio():
@@ -181,10 +183,18 @@ def test_waking_treated_like_awake_not_sleep():
 # Heat (in-policy, kein Lux-Gate)
 # --------------------------------------------------------------------------- #
 def test_heat_active():
-    d = decide(ctx(day_state=const.PHASE_FORENOON, weather_condition="sunny",
+    d = decide(ctx(day_state=const.PHASE_FORENOON, lux=30000,
                    outdoor_temp=25, sun_elevation=20))
     assert d.mode == const.MODE_HEAT
     assert d.target_position == 45
+
+
+def test_heat_active_partlycloudy_but_bright():
+    """Live-Regression 2026-08-04: partlycloudy + 37 °C + 73k lx → Heat greift jetzt
+    über die lokale Lux-Schwelle (DWD-Textlage ist keine Pflicht mehr)."""
+    d = decide(ctx(day_state=const.PHASE_FORENOON, weather_condition="partlycloudy",
+                   lux=73000, outdoor_temp=37, sun_elevation=51))
+    assert d.mode == const.MODE_HEAT
 
 
 @pytest.mark.parametrize("day_state", [
@@ -193,60 +203,68 @@ def test_heat_active():
     const.PHASE_AFTERNOON,
 ])
 def test_heat_active_from_late_morning_to_afternoon(day_state):
-    d = decide(ctx(day_state=day_state, weather_condition="sunny",
+    d = decide(ctx(day_state=day_state, lux=30000,
                    outdoor_temp=25, sun_elevation=20))
     assert d.mode == const.MODE_HEAT
 
 
 def test_heat_inactive_in_early_evening():
     """Heat endet mit afternoon — early_evening zählt nicht mehr (User 2026-06-27)."""
-    d = decide(ctx(day_state=const.PHASE_EARLY_EVENING, weather_condition="sunny",
+    d = decide(ctx(day_state=const.PHASE_EARLY_EVENING, lux=30000,
                    outdoor_temp=25, sun_elevation=20))
     assert d.mode != const.MODE_HEAT
 
 
-def test_heat_beats_open_weekday():
+def test_heat_beats_daytime_open_workday():
     d = decide(ctx(day_state=const.PHASE_LATE_MORNING,
                    day_context=const.DAY_CONTEXT_WERKTAG,
                    now_minutes=8 * 60,
-                   weather_condition="sunny", outdoor_temp=25, sun_elevation=20))
+                   lux=30000, outdoor_temp=25, sun_elevation=20))
     assert d.mode == const.MODE_HEAT
 
 
-def test_heat_beats_open_weekend():
+def test_heat_beats_daytime_open_weekend():
     d = decide(ctx(day_state=const.PHASE_FORENOON,
                    day_context=const.DAY_CONTEXT_WOCHENENDE,
                    now_minutes=10 * 60,
-                   weather_condition="sunny", outdoor_temp=25, sun_elevation=20))
+                   lux=30000, outdoor_temp=25, sun_elevation=20))
     assert d.mode == const.MODE_HEAT
 
 
-def test_heat_needs_sunny():
-    d = decide(ctx(day_state=const.PHASE_FORENOON, weather_condition="rainy",
-                   outdoor_temp=25, sun_elevation=20))
+def test_heat_needs_bright_enough():
+    # Warm + Sonne + Tagphase, aber lux unter der Schwelle → kein Heat (echt bedeckt).
+    d = decide(ctx(day_state=const.PHASE_FORENOON, weather_condition="sunny",
+                   lux=5000, outdoor_temp=25, sun_elevation=20))
+    assert d.mode != const.MODE_HEAT
+
+
+def test_heat_needs_lux_present():
+    # Lux unbekannt → Heat fällt sicher aus (kein DWD-String-Fallback mehr).
+    d = decide(ctx(day_state=const.PHASE_FORENOON, weather_condition="sunny",
+                   lux=None, outdoor_temp=25, sun_elevation=20))
     assert d.mode != const.MODE_HEAT
 
 
 def test_heat_needs_warm_enough():
-    d = decide(ctx(day_state=const.PHASE_FORENOON, weather_condition="sunny",
+    d = decide(ctx(day_state=const.PHASE_FORENOON, lux=30000,
                    outdoor_temp=23, sun_elevation=20))
     assert d.mode != const.MODE_HEAT
 
 
 def test_heat_needs_sun_above_5():
-    d = decide(ctx(day_state=const.PHASE_FORENOON, weather_condition="sunny",
+    d = decide(ctx(day_state=const.PHASE_FORENOON, lux=30000,
                    outdoor_temp=25, sun_elevation=4))
     assert d.mode != const.MODE_HEAT
 
 
 def test_heat_not_in_late_evening():
-    d = decide(ctx(day_state=const.PHASE_LATE_EVENING, weather_condition="sunny",
+    d = decide(ctx(day_state=const.PHASE_LATE_EVENING, lux=30000,
                    outdoor_temp=25, sun_elevation=20))
     assert d.mode != const.MODE_HEAT
 
 
 def test_heat_beats_daytime_sleep():
-    d = decide(ctx(day_state=const.PHASE_FORENOON, weather_condition="sunny",
+    d = decide(ctx(day_state=const.PHASE_FORENOON, lux=30000,
                    outdoor_temp=25, sun_elevation=20, bio_state=const.BIO_SLEEP))
     # Heat ist tagsüber Sonnenschutz; Nachtphasen bleiben durch das Day-State-Fenster geschützt.
     assert d.mode == const.MODE_HEAT
@@ -362,12 +380,12 @@ def test_day_state_unknown_blocks():
 # --------------------------------------------------------------------------- #
 # Decision-Trace (für Panel)
 # --------------------------------------------------------------------------- #
-def test_trace_has_all_eleven_rules_and_winner():
+def test_trace_has_all_rules_and_winner():
     d = decide(ctx(media_scenario=const.SCENARIO_TV), gate_on=True)
-    assert len(d.trace) == 11
+    assert len(d.trace) == 9
     matched = [e for e in d.trace if e.matched]
-    # erster matched ist der Gewinner (glare_tv = R9)
-    assert matched[0].rule == "R9"
+    # erster matched ist der Gewinner (glare_tv = R7)
+    assert matched[0].rule == "R7"
     assert d.mode == matched[0].mode
 
 

@@ -23,8 +23,7 @@ const MODE_LABEL = {
 
 const RULE_LABEL = {
   R1: "window_open", R2: "privacy_bed", R3: "privacy", R4: "alarm_wakeup",
-  R5: "heat", R6: "open_weekday", R7: "open_weekend", R8: "sleep",
-  R9: "glare_tv", R10: "glare_pc", R11: "open",
+  R5: "heat", R6: "sleep", R7: "glare_tv", R8: "glare_pc", R9: "open",
 };
 
 const PRESENCE_LABEL = { nicht_leer: "Anwesend", leer: "Niemand da" };
@@ -36,19 +35,17 @@ const fmtK = (n) => (n % 1000 === 0 ? `${n / 1000}k` : `${(n / 1000).toFixed(1)}
 /** Kurz-Bedingung je Regel ("ab wann greift sie"), parametriert mit den Live-Schwellen. */
 function ruleConditions(thr = {}) {
   const { gate_open_lux: go, gate_sun_min_deg: gs, heat_temp_c: ht, heat_sun_min_deg: hs,
-    privacy_latch_lux: pl, open_weekday_min_minutes: wd, open_weekend_min_minutes: we } = thr;
+    heat_lux_min: hl, privacy_latch_lux: pl } = thr;
   return {
     R1: "Fenster offen — absolut (Safety)",
     R2: "Privacy-Bett-Schalter an",
     R3: `Haushalt leer ODER Privacy-Latch (Latch abends < ${pl ?? "?"} lx)`,
     R4: "Wecker-Schalter an",
-    R5: `sunny + ≥ ${ht ?? "?"} °C + Sonne > ${hs ?? "?"}° + late_morning bis afternoon`,
-    R6: `late_morning + Werktag + ab ${wd != null ? hhmm(wd) : "?"}`,
-    R7: `forenoon + Wochenende/frei + ab ${we != null ? hhmm(we) : "?"}`,
-    R8: "Bio = sleep ODER Nachtphase",
-    R9: `Lux-Gate an (> ${go != null ? fmtK(go) : "?"} lx) + TV/Streaming/Gaming + nicht PC`,
-    R10: `Lux-Gate an (> ${go != null ? fmtK(go) : "?"} lx) + Gaming am PC`,
-    R11: "Fallback — trifft immer zu",
+    R5: `≥ ${hl != null ? fmtK(hl) : "20k"} lx + ≥ ${ht ?? "?"} °C + Sonne > ${hs ?? "?"}° + late_morning bis afternoon`,
+    R6: "Bio = sleep ODER Nachtphase",
+    R7: `Lux-Gate an (> ${go != null ? fmtK(go) : "?"} lx) + TV/Streaming/Gaming + nicht PC`,
+    R8: `Lux-Gate an (> ${go != null ? fmtK(go) : "?"} lx) + Gaming am PC`,
+    R9: "Fallback — trifft immer zu",
   };
 }
 
