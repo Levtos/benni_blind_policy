@@ -271,6 +271,39 @@ def test_heat_beats_daytime_sleep():
 
 
 # --------------------------------------------------------------------------- #
+# Heat-Lux-Floor konfigurierbar (Default 10k; 0 = nur Temp+Sonne)
+# --------------------------------------------------------------------------- #
+def test_heat_default_lux_floor_is_10k():
+    assert const.DEFAULT_HEAT_LUX_MIN == 10000
+    # knapp drunter (Default) → kein Heat, knapp drüber → Heat.
+    warm = dict(day_state=const.PHASE_FORENOON, outdoor_temp=25, sun_elevation=20)
+    assert decide(ctx(lux=9000, **warm)).mode != const.MODE_HEAT
+    assert decide(ctx(lux=11000, **warm)).mode == const.MODE_HEAT
+
+
+def test_heat_lux_floor_lowered_lets_dimmer_light_through():
+    # Live-Fall 2026-08-04: 17.7k lx bei 35 °C blockierte unter 20k. Mit Floor 10k
+    # (oder tiefer) feuert Heat.
+    d = decide(ctx(day_state=const.PHASE_FORENOON, lux=17700,
+                   outdoor_temp=35, sun_elevation=51), heat_lux_min=10000)
+    assert d.mode == const.MODE_HEAT
+
+
+def test_heat_lux_floor_zero_is_temp_sun_only():
+    # Floor 0 → Lux egal (auch unbekannt): rein Temp + Sonne + Tagphase.
+    d = decide(ctx(day_state=const.PHASE_FORENOON, lux=None,
+                   outdoor_temp=25, sun_elevation=20), heat_lux_min=0)
+    assert d.mode == const.MODE_HEAT
+
+
+def test_heat_lux_floor_high_blocks():
+    # Hoher Floor → helle-aber-nicht-grell Tage bleiben offen.
+    d = decide(ctx(day_state=const.PHASE_FORENOON, lux=17000,
+                   outdoor_temp=35, sun_elevation=50), heat_lux_min=25000)
+    assert d.mode != const.MODE_HEAT
+
+
+# --------------------------------------------------------------------------- #
 # R9/R10 — Glare (nur bei aktivem Lux-Gate)
 # --------------------------------------------------------------------------- #
 def test_glare_tv_with_gate():

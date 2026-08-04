@@ -21,7 +21,6 @@ from .const import (
     GATE_CLOSE_LUX,
     GATE_OPEN_LUX,
     GATE_SUN_MIN_DEG,
-    HEAT_LUX_MIN,
     HEAT_SUN_MIN_DEG,
     HEAT_TEMP_C,
     MANUAL_MODES,
@@ -34,6 +33,7 @@ from .const import (
     WS_GET_STATUS,
     WS_RESET_POSITION_PROFILE,
     WS_SET_APPLY_ENABLED,
+    WS_SET_HEAT_LUX_MIN,
     WS_SET_INVERT_POSITION,
     WS_SET_MANUAL_DECISION,
     WS_SET_MANUAL_POSITION,
@@ -93,7 +93,7 @@ def _status(hass: HomeAssistant, coord) -> dict[str, Any]:
             "gate_sun_min_deg": GATE_SUN_MIN_DEG,
             "heat_temp_c": HEAT_TEMP_C,
             "heat_sun_min_deg": HEAT_SUN_MIN_DEG,
-            "heat_lux_min": HEAT_LUX_MIN,
+            "heat_lux_min": coord.heat_lux_min,
             "privacy_latch_lux": PRIVACY_LATCH_LUX,
             "open_weekday_min_minutes": OPEN_WEEKDAY_MIN_MINUTES,
             "open_weekend_min_minutes": OPEN_WEEKEND_MIN_MINUTES,
@@ -232,6 +232,20 @@ def async_setup_websocket_api(hass: HomeAssistant) -> None:
         connection.send_result(msg["id"], _status(hass, coord))
 
     @websocket_api.websocket_command({
+        vol.Required("type"): WS_SET_HEAT_LUX_MIN,
+        vol.Required("lux"): vol.All(vol.Coerce(int), vol.Range(min=0, max=200000)),
+    })
+    @websocket_api.require_admin
+    @websocket_api.async_response
+    async def ws_set_heat_lux_min(hass, connection, msg) -> None:
+        coord = _coordinator(hass)
+        if coord is None:
+            connection.send_error(msg["id"], "not_ready", "Blind Policy not loaded")
+            return
+        await coord.async_set_heat_lux_min(msg["lux"])
+        connection.send_result(msg["id"], _status(hass, coord))
+
+    @websocket_api.websocket_command({
         vol.Required("type"): WS_SET_MANUAL_POSITION,
         vol.Required("position"): vol.All(vol.Coerce(int), vol.Range(min=0, max=100)),
     })
@@ -263,5 +277,6 @@ def async_setup_websocket_api(hass: HomeAssistant) -> None:
         ws_get_status, ws_apply_now, ws_set_apply_enabled, ws_set_invert_position,
         ws_set_privacy_bed, ws_clear_override, ws_set_position_profile,
         ws_reset_position_profile, ws_set_manual_position, ws_set_manual_decision,
+        ws_set_heat_lux_min,
     ):
         websocket_api.async_register_command(hass, cmd)

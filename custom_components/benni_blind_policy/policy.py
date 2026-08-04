@@ -26,6 +26,7 @@ from .const import (
     BIO_SLEEP,
     BIO_WAKING,
     DAY_CONTEXT_WOCHENENDE,
+    DEFAULT_HEAT_LUX_MIN,
     DEFAULT_POSITION_PROFILE,
     GAMING_PC,
     GAMING_NONE,
@@ -34,7 +35,6 @@ from .const import (
     GATE_OPEN_LUX,
     GATE_SUN_MIN_DEG,
     HEAT_DAY_STATES,
-    HEAT_LUX_MIN,
     HEAT_SUN_MIN_DEG,
     HEAT_TEMP_C,
     HOUSEHOLD_EMPTY,
@@ -204,19 +204,20 @@ def lux_gate(
 # --------------------------------------------------------------------------- #
 # Prioritätskette (Lastenheft §4.1 / §5)
 # --------------------------------------------------------------------------- #
-def _heat_active(n: _Norm) -> bool:
+def _heat_active(n: _Norm, heat_lux_min: int) -> bool:
     """Direkter Sonnenschutz, in-policy aus Rohdaten.
 
-    Trigger über LOKALE Helligkeit (``lux`` ≥ HEAT_LUX_MIN) statt DWD-Textlage —
-    die alte harte ``weather_condition == "sunny"``-Pflicht feuerte praktisch nie,
-    weil DWD an heißen, hellen Tagen fast durchgehend ``partlycloudy`` meldet. Lux
-    ist die lokale Wahrheit der Sonnenlast; ein wirklich bedeckter Tag fällt über
-    die Lux-Schwelle raus. Temperatur, Sonnenhöhe und Tagesphasen-Fenster bleiben
-    unverändert harte Bedingungen. Kein Schmitt-Lux-Gate (das ist Glare-only).
+    Ausschlaggebend sind Temperatur (≥ HEAT_TEMP_C) und Sonnenhöhe (> HEAT_SUN_MIN_DEG,
+    im Sommer bis ~16:00) im Tagesphasen-Fenster. ``lux`` ist nur ein niedriger,
+    konfigurierbarer „nicht dunkel"-Floor (``heat_lux_min``) gegen echte Bewölkung/
+    Nacht — KEIN harter Helligkeits-Gate mehr. ``heat_lux_min == 0`` ⇒ Lux ist egal
+    (rein Temp+Sonne). Lux unbekannt zählt nur dann als erfüllt, wenn der Floor 0 ist
+    (sonst fail-safe: kein Heat ohne Helligkeitsnachweis). Kein Schmitt-Lux-Gate
+    (das ist Glare-only).
     """
+    lux_ok = heat_lux_min <= 0 or (n.lux is not None and n.lux >= heat_lux_min)
     return (
-        n.lux is not None
-        and n.lux >= HEAT_LUX_MIN
+        lux_ok
         and n.outdoor_temp is not None
         and n.outdoor_temp >= HEAT_TEMP_C
         and n.sun_elevation is not None
@@ -234,7 +235,9 @@ def _sleep_active(n: _Norm) -> bool:
     )
 
 
-def evaluate_chain(n: _Norm, gate_on: bool) -> tuple[RuleEval, list[RuleEval]]:
+def evaluate_chain(
+    n: _Norm, gate_on: bool, heat_lux_min: int = DEFAULT_HEAT_LUX_MIN
+) -> tuple[RuleEval, list[RuleEval]]:
     """Wertet die Prioritätskette R1..R11 aus.
 
     Returns (winner, full_trace). Erste zutreffende Regel (höchste Priorität)
@@ -247,7 +250,7 @@ def evaluate_chain(n: _Norm, gate_on: bool) -> tuple[RuleEval, list[RuleEval]]:
         ("R2", MODE_PRIVACY_BED, n.privacy_bed),
         ("R3", MODE_PRIVACY, n.presence_household == HOUSEHOLD_EMPTY or n.privacy_latch),
         ("R4", MODE_ALARM_WAKEUP, n.alarm_wakeup),
-        ("R5", MODE_HEAT, _heat_active(n)),
+        ("R5", MODE_HEAT, _heat_active(n, heat_lux_min)),
         # Sleep folgt dem Wake-Planner (bio_state), nicht der Uhr: solange bio == sleep
         # bzw. Nachtphase gilt, hält Sleep das Rollo zu; sobald bio auf waking/awake
         # kippt, fällt die Kette (bei sonst nichts Aktivem) auf R9 open — bio-getrieben,
@@ -314,6 +317,7 @@ def decide(
     startup_ready: bool,
     apply_enabled: bool,
     manual_override_active: bool,
+    heat_lux_min: int = DEFAULT_HEAT_LUX_MIN,
 ) -> Decision:
     """Vollständige Entscheidung inkl. Gating-Overlay.
 
@@ -323,7 +327,7 @@ def decide(
     """
     profile = {**DEFAULT_POSITION_PROFILE, **(position_profile or {})}
     n = _normalized(ctx)
-    winner, trace = evaluate_chain(n, gate_on)
+    winner, trace = evaluate_chain(n, gate_on, heat_lux_min)
     mode = winner.mode
     position = _position(mode, profile)
     reason = _REASONS.get(mode, mode)

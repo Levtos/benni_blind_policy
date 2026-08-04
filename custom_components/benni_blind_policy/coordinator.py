@@ -43,6 +43,7 @@ from .const import (
     CONF_DAY_CONTEXT,
     CONF_DAY_STATE,
     CONF_GAMING_SOURCE,
+    CONF_HEAT_LUX_MIN,
     CONF_INVERT_POSITION,
     CONF_LUX,
     CONF_MEDIA_SCENARIO,
@@ -59,6 +60,7 @@ from .const import (
     CORE_WINDOW_OPEN_ATTRIBUTE,
     DATA_SKIP_RELOAD_COUNT,
     DEFAULT_APPLY_ENABLED,
+    DEFAULT_HEAT_LUX_MIN,
     DEFAULT_INVERT_POSITION,
     DEFAULT_POSITION_PROFILE,
     DEFAULT_POSITION_PROFILE_INVERTED,
@@ -172,6 +174,14 @@ class BlindPolicyCoordinator:
     @property
     def startup_block_seconds(self) -> int:
         return int(self._opt(CONF_STARTUP_BLOCK_SECONDS, DEFAULT_STARTUP_BLOCK_SECONDS))
+
+    @property
+    def heat_lux_min(self) -> int:
+        """Konfigurierbarer Heat-Lux-Floor (0 = nur Temp+Sonne). Nie negativ."""
+        try:
+            return max(0, int(self._opt(CONF_HEAT_LUX_MIN, DEFAULT_HEAT_LUX_MIN)))
+        except (TypeError, ValueError):
+            return DEFAULT_HEAT_LUX_MIN
 
     @property
     def invert_position(self) -> bool:
@@ -632,6 +642,7 @@ class BlindPolicyCoordinator:
             startup_ready=self._startup_ready(),
             apply_enabled=self.apply_enabled,
             manual_override_active=self._manual_override,
+            heat_lux_min=self.heat_lux_min,
         )
 
         # R1 absolut: window_open darf einen Override löschen (auch expliziten).
@@ -771,6 +782,17 @@ class BlindPolicyCoordinator:
         """Cover-Achse spiegeln (umgekehrte Fahrtrichtung kompensieren)."""
         self._skip_next_entry_reload()
         new_options = {**self.entry.options, CONF_INVERT_POSITION: bool(value)}
+        self.hass.config_entries.async_update_entry(self.entry, options=new_options)
+        await self.async_evaluate()
+
+    async def async_set_heat_lux_min(self, value: int) -> None:
+        """Heat-Lux-Floor setzen (0 = nur Temp+Sonne, sonst ≥ 0). Panel/Options."""
+        try:
+            lux = max(0, int(value))
+        except (TypeError, ValueError):
+            return
+        self._skip_next_entry_reload()
+        new_options = {**self.entry.options, CONF_HEAT_LUX_MIN: lux}
         self.hass.config_entries.async_update_entry(self.entry, options=new_options)
         await self.async_evaluate()
 
