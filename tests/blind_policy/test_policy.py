@@ -110,11 +110,33 @@ def test_privacy_latch_active():
     assert d.mode == const.MODE_PRIVACY
 
 
+def test_sleep_beats_privacy_latch():
+    # Regression: abends setzt der Privacy-Latch und schlug bisher den Schlaf.
+    # Sleep (R5) steht jetzt ÜBER Privacy (R6) → bei Bio-sleep gewinnt sleep.
+    d = decide(ctx(privacy_latch=True, bio_state=const.BIO_SLEEP,
+                   day_state=const.PHASE_EARLY_NIGHT))
+    assert d.mode == const.MODE_SLEEP
+
+
+def test_privacy_wins_when_awake():
+    # Wach + Latch (z. B. Haushalt leer) → Sleep inaktiv → Privacy greift weiter.
+    d = decide(ctx(privacy_latch=True, bio_state=const.BIO_AWAKE,
+                   day_state=const.PHASE_AFTERNOON))
+    assert d.mode == const.MODE_PRIVACY
+
+
 def test_alarm_wakeup_prio3():
     d = decide(ctx(alarm_wakeup=True, bio_state=const.BIO_SLEEP,
                    day_state=const.PHASE_EARLY_NIGHT))
     assert d.mode == const.MODE_ALARM_WAKEUP
     assert d.target_position == 100
+
+
+def test_alarm_wakeup_beats_sleep():
+    # Wecken schlägt Schlaf: alarm (R3) über sleep (R5).
+    d = decide(ctx(alarm_wakeup=True, bio_state=const.BIO_SLEEP,
+                   day_state=const.PHASE_LATE_NIGHT))
+    assert d.mode == const.MODE_ALARM_WAKEUP
 
 
 # Öffnen am Morgen ist jetzt bio-getrieben (Wake-Planner), nicht mehr zeitgebunden:
