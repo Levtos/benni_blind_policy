@@ -36,6 +36,7 @@ except Exception:  # pragma: no cover
 
 from . import policy
 from .const import (
+    AUTOMATIC_APPLY_COOLDOWN_SECONDS,
     CONF_APPLY_ENABLED,
     CONF_BLIND_MASTER,
     CONF_BIO_STATE,
@@ -67,6 +68,7 @@ from .const import (
     DEFAULT_PROFILE_ROUTE,
     DEFAULT_STARTUP_BLOCK_SECONDS,
     DOMAIN,
+    MODE_WINDOW_OPEN,
     RECENT_APPLY_GUARD_SECONDS,
     UPDATE_INTERVAL_SECONDS,
     WARDEN_RACE_ECHO_SECONDS,
@@ -130,6 +132,8 @@ class BlindPolicyCoordinator:
         self._writing_off_ts: float | None = None        # monotonic (Race-Echo)
         self._writing_release_unsub: CALLBACK_TYPE | None = None
         self._writing_timeout_unsub: CALLBACK_TYPE | None = None
+        self._automatic_recheck_unsub: CALLBACK_TYPE | None = None
+        self._last_auto_apply_ts: float | None = None
         self._last_apply_ts = 0.0
         self._last_target: int | None = None
 
@@ -303,12 +307,18 @@ class BlindPolicyCoordinator:
         for unsub in self._unsub:
             unsub()
         self._unsub.clear()
-        for unsub in (self._startup_unsub, self._writing_release_unsub, self._writing_timeout_unsub):
+        for unsub in (
+            self._startup_unsub,
+            self._writing_release_unsub,
+            self._writing_timeout_unsub,
+            self._automatic_recheck_unsub,
+        ):
             if unsub is not None:
                 unsub()
         self._startup_unsub = None
         self._writing_release_unsub = None
         self._writing_timeout_unsub = None
+        self._automatic_recheck_unsub = None
 
     @callback
     def _on_started(self, _event) -> None:
@@ -617,7 +627,7 @@ class BlindPolicyCoordinator:
         self._manual_target = None
 
     # ----- evaluation -----
-    async def async_evaluate(self) -> policy.Decision:
+    async def async_evaluate(self, *, force_apply: bool = False) -> policy.Decision:
         ctx = self.build_context()
 
         # Override-Reset beim Eintritt in Bio-Sleep (vor Latch-Update, das prev_bio
@@ -652,7 +662,11 @@ class BlindPolicyCoordinator:
         self._last_decision = decision
 
         if decision.apply_allowed and decision.target_position is not None and self.cover_entity:
-            await self._apply(decision.target_position)
+            await self._apply(
+                decision.target_position,
+                automatic=not force_apply,
+                immediate=decision.mode == MODE_WINDOW_OPEN,
+            )
 
         await self._async_save()
         for cb in self._listeners:
@@ -660,7 +674,13 @@ class BlindPolicyCoordinator:
         return decision
 
     # ----- apply (gated, R-MO Writing-Active) -----
-    async def _apply(self, target: int) -> None:
+    async def _apply(
+        self,
+        target: int,
+        *,
+        automatic: bool = True,
+        immediate: bool = False,
+    ) -> None:
         # Ziel ist die direkte Geräteposition (aktives Profil hat sie schon gewählt).
         target = max(0, min(100, int(target)))
         current = self._cover_position()
@@ -668,9 +688,24 @@ class BlindPolicyCoordinator:
         # unnötige Fahrten + Writing-Flag-Churn.
         if current is not None and abs(current - target) < 1:
             return
+        # Automatische Gegenbefehle werden während einer eigenen Fahrt und im
+        # Cooldown verworfen; der nächste Lauf bewertet den aktuellen Policy-State
+        # neu und verwendet keinen vorgemerkten Zielwert. R1 (window_open) bleibt
+        # als absolute Sicherheitsreaktion sofort durchsetzbar.
+        if automatic and not immediate:
+            if self._writing_active:
+                return
+            remaining = self._automatic_apply_cooldown_remaining()
+            if remaining > 0:
+                self._schedule_automatic_recheck(remaining)
+                return
         self._last_target = target
         self._rest_pos = target       # eigene Fahrt setzt die Ruhe-Baseline (kein Selbst-Override)
-        self._last_apply_ts = time.monotonic()
+        now = time.monotonic()
+        self._last_apply_ts = now
+        if automatic:
+            self._last_auto_apply_ts = now
+            self._cancel_automatic_recheck()
         self._set_writing_active(True)
         try:
             await self.hass.services.async_call(
@@ -684,6 +719,34 @@ class BlindPolicyCoordinator:
             return
         # Writing-Flag nach Fahrt + Grace bzw. spätestens nach 90s Timeout lösen.
         self._schedule_writing_release()
+
+    def _automatic_apply_cooldown_remaining(self) -> float:
+        if self._last_auto_apply_ts is None:
+            return 0.0
+        return max(
+            0.0,
+            AUTOMATIC_APPLY_COOLDOWN_SECONDS
+            - (time.monotonic() - self._last_auto_apply_ts),
+        )
+
+    def _cancel_automatic_recheck(self) -> None:
+        if self._automatic_recheck_unsub is not None:
+            self._automatic_recheck_unsub()
+            self._automatic_recheck_unsub = None
+
+    def _schedule_automatic_recheck(self, delay: float) -> None:
+        """Nach dem Cooldown die aktuelle Policy-Entscheidung erneut auswerten."""
+        if self._automatic_recheck_unsub is not None:
+            return
+
+        @callback
+        def _fire(_now) -> None:
+            self._automatic_recheck_unsub = None
+            self.hass.async_create_task(self.async_evaluate())
+
+        self._automatic_recheck_unsub = async_call_later(
+            self.hass, max(0.1, delay), _fire
+        )
 
     def _set_writing_active(self, value: bool) -> None:
         if value == self._writing_active:
@@ -710,6 +773,7 @@ class BlindPolicyCoordinator:
             self._set_writing_active(False)
             for cb in self._listeners:
                 cb()
+            self.hass.async_create_task(self.async_evaluate())
 
         @callback
         def _timeout(_now) -> None:
@@ -717,6 +781,7 @@ class BlindPolicyCoordinator:
             self._set_writing_active(False)
             for cb in self._listeners:
                 cb()
+            self.hass.async_create_task(self.async_evaluate())
 
         # Grace ab jetzt (deckt kurze Fahrten); harter 90s-Cap als Backstop.
         self._writing_release_unsub = async_call_later(
@@ -728,11 +793,11 @@ class BlindPolicyCoordinator:
 
     # ----- service / switch surface -----
     async def async_apply_now(self) -> policy.Decision:
-        return await self.async_evaluate()
+        return await self.async_evaluate(force_apply=True)
 
     async def async_set_privacy_bed(self, value: bool) -> None:
         self._privacy_bed = bool(value)
-        await self.async_evaluate()
+        await self.async_evaluate(force_apply=True)
 
     async def async_set_alarm_wakeup(self, value: bool) -> None:
         self._alarm_wakeup = bool(value)
@@ -740,7 +805,7 @@ class BlindPolicyCoordinator:
 
     async def async_clear_manual_override(self) -> None:
         self._clear_manual_state()
-        await self.async_evaluate()
+        await self.async_evaluate(force_apply=True)
 
     async def async_set_manual_position(self, position: int) -> None:
         """Panel: Rollo manuell auf x % fahren + Override halten (auch im Shadow)."""
@@ -750,8 +815,8 @@ class BlindPolicyCoordinator:
         self._manual_mode = None
         self._manual_target = pos
         self._override_set_ts = time.monotonic()
-        await self._apply(pos)          # direkter Fahrbefehl, unabhängig vom apply_enabled-Gate
-        await self.async_evaluate()
+        await self._apply(pos, automatic=False)  # direkter Fahrbefehl, unabhängig vom apply_enabled-Gate
+        await self.async_evaluate(force_apply=True)
 
     async def async_set_manual_decision(self, mode: str) -> None:
         """Panel: Policy manuell auf einen Modus zwingen (Position aus dem Profil)."""
@@ -764,26 +829,26 @@ class BlindPolicyCoordinator:
         self._manual_target = pos
         self._override_set_ts = time.monotonic()
         if pos is not None:
-            await self._apply(pos)
-        await self.async_evaluate()
+            await self._apply(pos, automatic=False)
+        await self.async_evaluate(force_apply=True)
 
     async def async_set_manual_override(self, value: bool) -> None:
         self._manual_override = bool(value)
         self._override_set_ts = time.monotonic() if value else None
-        await self.async_evaluate()
+        await self.async_evaluate(force_apply=not value)
 
     async def async_set_apply_enabled(self, value: bool) -> None:
         self._skip_next_entry_reload()
         new_options = {**self.entry.options, CONF_APPLY_ENABLED: bool(value)}
         self.hass.config_entries.async_update_entry(self.entry, options=new_options)
-        await self.async_evaluate()
+        await self.async_evaluate(force_apply=True)
 
     async def async_set_invert_position(self, value: bool) -> None:
         """Cover-Achse spiegeln (umgekehrte Fahrtrichtung kompensieren)."""
         self._skip_next_entry_reload()
         new_options = {**self.entry.options, CONF_INVERT_POSITION: bool(value)}
         self.hass.config_entries.async_update_entry(self.entry, options=new_options)
-        await self.async_evaluate()
+        await self.async_evaluate(force_apply=True)
 
     async def async_set_heat_lux_min(self, value: int) -> None:
         """Heat-Lux-Floor setzen (0 = nur Temp+Sonne, sonst ≥ 0). Panel/Options."""
@@ -794,7 +859,7 @@ class BlindPolicyCoordinator:
         self._skip_next_entry_reload()
         new_options = {**self.entry.options, CONF_HEAT_LUX_MIN: lux}
         self.hass.config_entries.async_update_entry(self.entry, options=new_options)
-        await self.async_evaluate()
+        await self.async_evaluate(force_apply=True)
 
     @staticmethod
     def _clean_profile(profile: dict[str, int] | None) -> dict[str, int]:
@@ -821,7 +886,7 @@ class BlindPolicyCoordinator:
             }
         self._skip_next_entry_reload()
         self.hass.config_entries.async_update_entry(self.entry, options=new_options)
-        await self.async_evaluate()
+        await self.async_evaluate(force_apply=True)
         return {
             "position_profile": self.position_profile,
             "position_profile_inverted": self.position_profile_inverted,
@@ -836,7 +901,7 @@ class BlindPolicyCoordinator:
             CONF_POSITION_PROFILE_INVERTED: dict(DEFAULT_POSITION_PROFILE_INVERTED),
         }
         self.hass.config_entries.async_update_entry(self.entry, options=new_options)
-        await self.async_evaluate()
+        await self.async_evaluate(force_apply=True)
         return {
             "position_profile": self.position_profile,
             "position_profile_inverted": self.position_profile_inverted,

@@ -160,6 +160,7 @@ OPEN_WEEKEND_MIN_MINUTES: Final = 9 * 60 + 30   # 09:30
 
 WRITING_GRACE_SECONDS: Final = 5      # Writing-Active-Nachlauf
 WRITING_TIMEOUT_SECONDS: Final = 90   # Cover-Fahrt-Timeout
+AUTOMATIC_APPLY_COOLDOWN_SECONDS: Final = 60  # Debounce für automatische Policy-Applies
 WARDEN_RACE_ECHO_SECONDS: Final = 30  # Race-Echo-Fenster (Writing kürzlich aus)
 WARDEN_POSITION_TOLERANCE: Final = 3  # ±3 %
 WARDEN_SWEEP_INTERVAL_SECONDS: Final = 300       # 5-Min-Sweep
