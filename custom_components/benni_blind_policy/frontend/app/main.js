@@ -22,8 +22,8 @@ const MODE_LABEL = {
 };
 
 const RULE_LABEL = {
-  R1: "window_open", R2: "privacy_bed", R3: "privacy", R4: "alarm_wakeup",
-  R5: "heat", R6: "sleep", R7: "glare_tv", R8: "glare_pc", R9: "open",
+  R1: "window_open", R2: "privacy_bed", R3: "alarm_wakeup", R4: "heat",
+  R5: "sleep", R6: "privacy", R7: "glare_tv", R8: "glare_pc", R9: "open",
 };
 
 const PRESENCE_LABEL = { nicht_leer: "Anwesend", leer: "Niemand da" };
@@ -39,10 +39,10 @@ function ruleConditions(thr = {}) {
   return {
     R1: "Fenster offen — absolut (Safety)",
     R2: "Privacy-Bett-Schalter an",
-    R3: `Haushalt leer ODER Privacy-Latch (Latch abends < ${pl ?? "?"} lx)`,
-    R4: "Wecker-Schalter an",
-    R5: `≥ ${hl != null ? fmtK(hl) : "20k"} lx + ≥ ${ht ?? "?"} °C + Sonne > ${hs ?? "?"}° + late_morning bis afternoon`,
-    R6: "Bio = sleep ODER Nachtphase",
+    R3: "Wecker-Schalter an",
+    R4: `≥ ${hl != null ? fmtK(hl) : "10k"} lx + ≥ ${ht ?? "?"} °C + Sonne > ${hs ?? "?"}° + late_morning bis afternoon`,
+    R5: "Bio = sleep ODER Nachtphase",
+    R6: `Haushalt leer ODER Privacy-Latch (Latch abends < ${pl ?? "?"} lx)`,
     R7: `Lux-Gate an (> ${go != null ? fmtK(go) : "?"} lx) + TV/Streaming/Gaming + nicht PC`,
     R8: `Lux-Gate an (> ${go != null ? fmtK(go) : "?"} lx) + Gaming am PC`,
     R9: "Fallback — trifft immer zu",
@@ -162,14 +162,21 @@ class BbpApp extends HTMLElement {
   async _tick() {
     if (!this._hass) return;
     if (this._isEditing()) return;
+    // Generation vor dem await merken: löst der User währenddessen eine Aktion aus
+    // (_call bumpt _gen), ist diese Poll-Antwort veraltet und darf den frischen
+    // Zustand NICHT überschreiben (Refresh-Bug: Override sah aus, als griffe er nicht).
+    const gen = this._gen || 0;
+    let status;
     try {
-      this._status = await this._hass.callWS({ type: "benni_blind_policy/get_status" });
+      status = await this._hass.callWS({ type: "benni_blind_policy/get_status" });
     } catch (e) {
       this.shadowRoot.getElementById("root").innerHTML =
         `<div class="err">Blind Policy nicht geladen oder keine Berechtigung.<br>${e.message || e}</div>`;
       return;
     }
-    if (this._isEditing()) return;  // Fokus kam während des await — Render überspringen.
+    if (this._isEditing()) return;        // Fokus kam während des await — Render überspringen.
+    if (gen !== (this._gen || 0)) return; // User-Aktion während des await → stale, verwerfen.
+    this._status = status;
     try {
       this._render();
     } catch (e) {
@@ -179,8 +186,15 @@ class BbpApp extends HTMLElement {
   }
 
   async _call(type, extra = {}) {
-    try { this._status = await this._hass.callWS({ type, ...extra }); this._render(); }
-    catch (e) { /* require_admin etc. */ console.error(e); }
+    // Jede User-Aktion invalidiert in-flight Polls (Refresh-Race) und gewinnt.
+    const myGen = (this._gen || 0) + 1;
+    this._gen = myGen;
+    try {
+      const status = await this._hass.callWS({ type, ...extra });
+      if (myGen !== this._gen) return;    // eine spätere Aktion hat überholt → verwerfen.
+      this._status = status;
+      this._render();
+    } catch (e) { /* require_admin etc. */ console.error(e); }
   }
 
   _badge(label, on) {
@@ -210,7 +224,7 @@ class BbpApp extends HTMLElement {
       const nv = pp[m], iv = ppi[m];
       const nAct = (!inv && isWin) ? "cellact" : "";
       const iAct = (inv && isWin) ? "cellact" : "";
-      const condHtml = e.rule === "R5" ? heatCond(thr) : (cond[e.rule] || "");
+      const condHtml = e.rule === "R4" ? heatCond(thr) : (cond[e.rule] || "");
       return `<div class="trow ${isWin ? "win" : ""}">
         <span class="dot ${isWin ? "win" : e.matched ? "true" : ""}"></span>
         <span class="rid">${e.rule}</span>

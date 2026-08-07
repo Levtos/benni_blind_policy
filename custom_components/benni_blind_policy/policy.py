@@ -248,17 +248,16 @@ def evaluate_chain(
     rules: list[tuple[str, str, bool]] = [
         ("R1", MODE_WINDOW_OPEN, n.window_open),
         ("R2", MODE_PRIVACY_BED, n.privacy_bed),
-        ("R3", MODE_PRIVACY, n.presence_household == HOUSEHOLD_EMPTY or n.privacy_latch),
-        ("R4", MODE_ALARM_WAKEUP, n.alarm_wakeup),
-        ("R5", MODE_HEAT, _heat_active(n, heat_lux_min)),
-        # Sleep folgt dem Wake-Planner (bio_state), nicht der Uhr: solange bio == sleep
-        # bzw. Nachtphase gilt, hält Sleep das Rollo zu; sobald bio auf waking/awake
-        # kippt, fällt die Kette (bei sonst nichts Aktivem) auf R9 open — bio-getrieben,
-        # nicht zeitgetrieben. Die früheren zeitgebundenen Öffner open_weekday/-weekend
-        # (fixe Uhrzeit 08:00/09:30) sind ENTFERNT: Altlast aus der Zeit vor dem
-        # Wake-Planner, die den echten Schlaf nach reiner Uhr aufriss. Das Öffnen am
-        # Morgen macht jetzt der Bio-Übergang.
-        ("R6", MODE_SLEEP, _sleep_active(n)),
+        ("R3", MODE_ALARM_WAKEUP, n.alarm_wakeup),
+        ("R4", MODE_HEAT, _heat_active(n, heat_lux_min)),
+        # Sleep steht ÜBER Privacy (R6): abends setzt der Privacy-Latch (Dunkelheit/
+        # early_night) und schlug bisher den aktiven Schlaf, obwohl beide 40 % fahren —
+        # semantisch soll bei Bio-sleep/Nachtphase „sleep" gewinnen. Alarm (R3, Wecken)
+        # und Heat (R4, Tag-Sonnenschutz) bleiben bewusst ÜBER Sleep; nur Privacy
+        # rutscht darunter. Sleep folgt dem Wake-Planner (bio_state), nicht der Uhr:
+        # bei waking/awake fällt die Kette (bei sonst nichts Aktivem) auf R9 open.
+        ("R5", MODE_SLEEP, _sleep_active(n)),
+        ("R6", MODE_PRIVACY, n.presence_household == HOUSEHOLD_EMPTY or n.privacy_latch),
         ("R7", MODE_GLARE_TV,
          gate_on
          and n.media_scenario in TV_GLARE_SCENARIOS
