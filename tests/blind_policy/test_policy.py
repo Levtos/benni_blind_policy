@@ -9,7 +9,7 @@ DECIDE_KW = dict(startup_ready=True, apply_enabled=True, manual_override_active=
 
 
 def ctx(**over):
-    """Default-Context, der ohne Override auf R11 (open) fällt."""
+    """Default-Context, der ohne Override auf R9 (open) fällt."""
     base = dict(
         window_open=False,
         bio_state=const.BIO_AWAKE,
@@ -34,6 +34,10 @@ def ctx(**over):
 def decide(c, *, gate_on=False, **kw):
     merged = {**DECIDE_KW, **kw}
     return policy.decide(c, gate_on=gate_on, **merged)
+
+
+def protection(c, *, gate_on=False, **kw):
+    return policy.evaluate_protection_demand(c, gate_on=gate_on, **kw)
 
 
 # --------------------------------------------------------------------------- #
@@ -91,7 +95,7 @@ def test_window_unknown_treated_as_open_safety():
 
 
 # --------------------------------------------------------------------------- #
-# Prioritätskette R2..R11
+# Prioritätskette R2..R9
 # --------------------------------------------------------------------------- #
 def test_privacy_bed_prio1():
     d = decide(ctx(privacy_bed=True, presence_household=const.HOUSEHOLD_EMPTY))
@@ -230,11 +234,10 @@ def test_heat_active_from_late_morning_to_afternoon(day_state):
     assert d.mode == const.MODE_HEAT
 
 
-def test_heat_inactive_in_early_evening():
-    """Heat endet mit afternoon — early_evening zählt nicht mehr (User 2026-06-27)."""
+def test_heat_is_independent_of_day_phase():
     d = decide(ctx(day_state=const.PHASE_EARLY_EVENING, lux=30000,
-                   outdoor_temp=25, sun_elevation=20))
-    assert d.mode != const.MODE_HEAT
+                   outdoor_temp=25, sun_elevation=0))
+    assert d.mode == const.MODE_HEAT
 
 
 def test_heat_beats_daytime_open_workday():
@@ -253,18 +256,18 @@ def test_heat_beats_daytime_open_weekend():
     assert d.mode == const.MODE_HEAT
 
 
-def test_heat_needs_bright_enough():
-    # Warm + Sonne + Tagphase, aber lux unter der Schwelle → kein Heat (echt bedeckt).
-    d = decide(ctx(day_state=const.PHASE_FORENOON, weather_condition="sunny",
-                   lux=5000, outdoor_temp=25, sun_elevation=20))
-    assert d.mode != const.MODE_HEAT
+def test_heat_ignores_weather_lux_and_sun_angle():
+    # Thermischer Schutz bleibt auch bei Regen, Dunkelheit und tiefem Sonnenwinkel aktiv.
+    d = decide(ctx(day_state=const.PHASE_FORENOON, weather_condition="rainy",
+                   lux=5000, outdoor_temp=30, sun_elevation=0))
+    assert d.mode == const.MODE_HEAT
 
 
-def test_heat_needs_lux_present():
-    # Lux unbekannt → Heat fällt sicher aus (kein DWD-String-Fallback mehr).
-    d = decide(ctx(day_state=const.PHASE_FORENOON, weather_condition="sunny",
-                   lux=None, outdoor_temp=25, sun_elevation=20))
-    assert d.mode != const.MODE_HEAT
+def test_heat_does_not_need_lux_present():
+    # Lux unknown/unavailable beeinflusst ausschließlich Glare.
+    d = decide(ctx(day_state=const.PHASE_FORENOON, weather_condition="cloudy",
+                   lux=None, outdoor_temp=25, sun_elevation=None))
+    assert d.mode == const.MODE_HEAT
 
 
 def test_heat_needs_warm_enough():
@@ -273,56 +276,206 @@ def test_heat_needs_warm_enough():
     assert d.mode != const.MODE_HEAT
 
 
-def test_heat_needs_sun_above_5():
+def test_heat_does_not_need_sun_above_5():
     d = decide(ctx(day_state=const.PHASE_FORENOON, lux=30000,
                    outdoor_temp=25, sun_elevation=4))
-    assert d.mode != const.MODE_HEAT
+    assert d.mode == const.MODE_HEAT
 
 
-def test_heat_not_in_late_evening():
+def test_heat_is_independent_of_late_evening():
     d = decide(ctx(day_state=const.PHASE_LATE_EVENING, lux=30000,
                    outdoor_temp=25, sun_elevation=20))
-    assert d.mode != const.MODE_HEAT
+    assert d.mode == const.MODE_HEAT
 
 
 def test_heat_beats_daytime_sleep():
     d = decide(ctx(day_state=const.PHASE_FORENOON, lux=30000,
                    outdoor_temp=25, sun_elevation=20, bio_state=const.BIO_SLEEP))
-    # Heat ist tagsüber Sonnenschutz; Nachtphasen bleiben durch das Day-State-Fenster geschützt.
-    assert d.mode == const.MODE_HEAT
+    # Sleep bleibt eine höhere bestehende Priorität vor der fusionierten Schutzschicht.
+    assert d.mode == const.MODE_SLEEP
 
 
 # --------------------------------------------------------------------------- #
-# Heat-Lux-Floor konfigurierbar (Default 10k; 0 = nur Temp+Sonne)
+# Legacy-Heat-Lux-Floor bleibt API-kompatibel, steuert Thermal aber nicht mehr.
 # --------------------------------------------------------------------------- #
-def test_heat_default_lux_floor_is_10k():
+def test_heat_legacy_lux_floor_does_not_change_thermal():
     assert const.DEFAULT_HEAT_LUX_MIN == 10000
-    # knapp drunter (Default) → kein Heat, knapp drüber → Heat.
     warm = dict(day_state=const.PHASE_FORENOON, outdoor_temp=25, sun_elevation=20)
-    assert decide(ctx(lux=9000, **warm)).mode != const.MODE_HEAT
+    assert decide(ctx(lux=9000, **warm), heat_lux_min=25000).mode == const.MODE_HEAT
     assert decide(ctx(lux=11000, **warm)).mode == const.MODE_HEAT
 
 
-def test_heat_lux_floor_lowered_lets_dimmer_light_through():
-    # Live-Fall 2026-08-04: 17.7k lx bei 35 °C blockierte unter 20k. Mit Floor 10k
-    # (oder tiefer) feuert Heat.
+def test_heat_legacy_lux_floor_is_ignored():
     d = decide(ctx(day_state=const.PHASE_FORENOON, lux=17700,
                    outdoor_temp=35, sun_elevation=51), heat_lux_min=10000)
     assert d.mode == const.MODE_HEAT
 
 
 def test_heat_lux_floor_zero_is_temp_sun_only():
-    # Floor 0 → Lux egal (auch unbekannt): rein Temp + Sonne + Tagphase.
+    # Legacy-Floor 0 bleibt ohne Einfluss; auch ein tiefer Sonnenwinkel blockiert nicht.
     d = decide(ctx(day_state=const.PHASE_FORENOON, lux=None,
-                   outdoor_temp=25, sun_elevation=20), heat_lux_min=0)
+                   outdoor_temp=25, sun_elevation=0), heat_lux_min=0)
     assert d.mode == const.MODE_HEAT
 
 
 def test_heat_lux_floor_high_blocks():
-    # Hoher Floor → helle-aber-nicht-grell Tage bleiben offen.
+    # Ein hoher historischer Floor darf den thermischen Schutz nicht mehr blockieren.
     d = decide(ctx(day_state=const.PHASE_FORENOON, lux=17000,
                    outdoor_temp=35, sun_elevation=50), heat_lux_min=25000)
-    assert d.mode != const.MODE_HEAT
+    assert d.mode == const.MODE_HEAT
+
+
+# --------------------------------------------------------------------------- #
+# Issue #9 — gemeinsame ProtectionDemand
+# --------------------------------------------------------------------------- #
+def test_protection_demand_heat_and_glare_use_effective_heat_position():
+    d = decide(
+        ctx(
+            day_state=const.PHASE_FORENOON,
+            outdoor_temp=30,
+            weather_condition="sunny",
+            lux=50000,
+            sun_elevation=30,
+            media_scenario=const.SCENARIO_TV,
+        ),
+        gate_on=True,
+    )
+    demand = d.protection_demand
+    assert demand is not None
+    assert demand.thermal_active is True
+    assert demand.glare_active is True
+    assert demand.thermal_target_position == 45
+    assert demand.glare_target_position == 60
+    assert demand.effective_target_position == 45
+    assert demand.effective_mode == const.MODE_HEAT
+    assert d.mode == const.MODE_HEAT
+    assert d.target_position == demand.effective_target_position
+
+
+def test_protection_demand_heat_ignores_rain_low_lux_and_sun_angle():
+    d = decide(
+        ctx(
+            day_state=const.PHASE_EARLY_EVENING,
+            outdoor_temp=30,
+            weather_condition="rainy",
+            lux=100,
+            sun_elevation=0,
+            media_scenario=const.SCENARIO_IDLE,
+        ),
+        gate_on=False,
+    )
+    assert d.mode == const.MODE_HEAT
+    assert d.target_position == 45
+    assert d.protection_demand is not None
+    assert d.protection_demand.glare_active is False
+
+
+def test_protection_demand_holds_thermal_state_during_temperature_outage():
+    demand = protection(
+        ctx(outdoor_temp=None, lux=None, sun_elevation=None),
+        previous_thermal_active=True,
+    )
+    assert demand.thermal_active is True
+    assert demand.effective_mode == const.MODE_HEAT
+    assert demand.diagnostics["thermal_state_held"] is True
+
+
+def test_decision_holds_previous_thermal_state_when_temperature_is_unavailable():
+    d = decide(
+        ctx(outdoor_temp=None, lux=None, sun_elevation=None),
+        gate_on=True,
+        previous_thermal_active=True,
+    )
+    assert d.mode == const.MODE_HEAT
+    assert d.target_position == 45
+    assert d.protection_demand is not None
+    assert d.protection_demand.diagnostics["thermal_state_held"] is True
+
+
+def test_protection_demand_does_not_create_thermal_state_without_temperature():
+    demand = protection(ctx(outdoor_temp=None), previous_thermal_active=None)
+    assert demand.thermal_active is False
+    assert demand.effective_mode is None
+
+
+def test_low_temperature_direct_sun_tv_uses_only_glare_tv():
+    d = decide(
+        ctx(
+            outdoor_temp=20,
+            lux=50000,
+            sun_elevation=30,
+            media_scenario=const.SCENARIO_TV,
+        ),
+        gate_on=True,
+    )
+    assert d.mode == const.MODE_GLARE_TV
+    assert d.target_position == 60
+    assert d.protection_demand is not None
+    assert d.protection_demand.thermal_active is False
+    assert d.protection_demand.glare_active is True
+
+
+def test_low_temperature_pc_gaming_uses_only_glare_pc():
+    d = decide(
+        ctx(
+            outdoor_temp=20,
+            lux=50000,
+            sun_elevation=30,
+            media_scenario=const.SCENARIO_GAMING,
+            gaming_source=const.GAMING_PC,
+        ),
+        gate_on=True,
+    )
+    assert d.mode == const.MODE_GLARE_PC
+    assert d.target_position == 75
+    assert d.protection_demand is not None
+    assert d.protection_demand.thermal_active is False
+    assert d.protection_demand.glare_target_position == 75
+
+
+def test_protection_demand_uses_axis_direction_for_inverted_profile():
+    d = decide(
+        ctx(
+            outdoor_temp=30,
+            media_scenario=const.SCENARIO_TV,
+        ),
+        gate_on=True,
+        position_profile=const.DEFAULT_POSITION_PROFILE_INVERTED,
+    )
+    demand = d.protection_demand
+    assert demand is not None
+    assert demand.thermal_target_position == 55
+    assert demand.glare_target_position == 40
+    assert demand.effective_target_position == 55
+    assert demand.effective_mode == const.MODE_HEAT
+    assert d.target_position == 55
+
+
+def test_policy_and_diagnostic_trace_share_one_effective_protection_demand():
+    d = decide(
+        ctx(outdoor_temp=30, media_scenario=const.SCENARIO_TV),
+        gate_on=True,
+    )
+    payload = d.as_dict()
+    protection_payload = payload["protection_demand"]
+    protection_trace = next(entry for entry in payload["trace"] if entry["rule"] == "R6")
+    assert protection_payload["effective_target_position"] == d.target_position == 45
+    assert protection_trace["position"] == protection_payload["effective_target_position"]
+    assert protection_trace["mode"] == protection_payload["effective_mode"] == const.MODE_HEAT
+
+
+def test_higher_existing_priorities_still_beat_fused_protection():
+    assert decide(ctx(window_open=True, outdoor_temp=30), gate_on=True).mode == const.MODE_WINDOW_OPEN
+    assert decide(ctx(presence_household=const.HOUSEHOLD_EMPTY, outdoor_temp=30)).mode == const.MODE_PRIVACY
+    assert decide(ctx(bio_state=const.BIO_SLEEP, outdoor_temp=30)).mode == const.MODE_SLEEP
+
+
+def test_unavailable_glare_input_does_not_block_valid_thermal_protection():
+    d = decide(ctx(outdoor_temp=30, media_scenario=None, lux=None, sun_elevation=None))
+    assert d.mode == const.MODE_HEAT
+    assert d.protection_demand is not None
+    assert d.protection_demand.thermal_active is True
+    assert d.protection_demand.glare_active is False
 
 
 # --------------------------------------------------------------------------- #
@@ -360,7 +513,7 @@ def test_glare_pc_not_when_sleep():
 
 
 # --------------------------------------------------------------------------- #
-# R11 — Fallback
+# R9 — Fallback
 # --------------------------------------------------------------------------- #
 def test_fallback_open():
     d = decide(ctx())
@@ -391,6 +544,17 @@ def test_lux_gate_grey_zone_holds_prev():
 def test_lux_gate_unknown_holds_prev():
     assert policy.lux_gate(None, True, sun_elevation=10,
                            day_state=const.PHASE_FORENOON) is True
+
+
+def test_lux_gate_unknown_inputs_hold_and_numeric_reassessment_is_immediate():
+    assert policy.lux_gate(21000, True, sun_elevation=None,
+                           day_state=const.PHASE_FORENOON) is True
+    assert policy.lux_gate(21000, True, sun_elevation=10,
+                           day_state=None) is True
+    assert policy.lux_gate(21000, False, sun_elevation=10,
+                           day_state=const.PHASE_FORENOON) is True
+    assert policy.lux_gate(14000, True, sun_elevation=10,
+                           day_state=const.PHASE_FORENOON) is False
 
 
 def test_lux_gate_needs_sun_above_5():
@@ -438,10 +602,11 @@ def test_day_state_unknown_blocks():
 def test_trace_has_all_rules_and_winner():
     d = decide(ctx(media_scenario=const.SCENARIO_TV), gate_on=True)
     assert len(d.trace) == 9
-    matched = [e for e in d.trace if e.matched]
-    # erster matched ist der Gewinner (glare_tv = R7)
-    assert matched[0].rule == "R7"
+    matched = [e for e in d.trace if e.matched and e.candidate]
+    # R6 ist die einzige konkurrierende Schutzregel; R7/R8 sind Diagnosezeilen.
+    assert matched[0].rule == "R6"
     assert d.mode == matched[0].mode
+    assert any(e.rule == "R7" and e.matched and not e.candidate for e in d.trace)
 
 
 # --------------------------------------------------------------------------- #

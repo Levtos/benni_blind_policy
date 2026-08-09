@@ -112,6 +112,7 @@ def _make_coordinator(monkeypatch):
     coord._writing_timeout_unsub = None
     coord._automatic_recheck_unsub = None
     coord._last_auto_apply_ts = None
+    coord._prev_thermal_active = None
     coord._last_apply_ts = 0.0
     coord._last_target = None
     coord._rest_pos = None
@@ -137,6 +138,15 @@ def test_identical_target_position_does_not_call_service(monkeypatch):
     _run(coord._apply(40))
 
     assert services.calls == []
+
+
+def test_repeated_fused_protection_target_does_not_duplicate_apply(monkeypatch):
+    coord, _clock, services, _scheduled, _tasks, current = _make_coordinator(monkeypatch)
+    _run(coord._apply(45))
+    current["position"] = 45
+    coord._writing_active = False
+    _run(coord._apply(45))
+    assert [call[2]["position"] for call in services.calls] == [45]
 
 
 def test_automatic_apply_is_debounced_for_60_seconds(monkeypatch):

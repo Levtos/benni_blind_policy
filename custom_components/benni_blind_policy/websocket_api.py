@@ -78,6 +78,9 @@ def _status(hass: HomeAssistant, coord) -> dict[str, Any]:
         "reason": d.reason if d else None,
         "apply_allowed": d.apply_allowed if d else None,
         "blockers": list(d.blockers) if d else [],
+        "protection_demand": (
+            d.protection_demand.as_dict() if d and d.protection_demand else None
+        ),
         "gate_on": coord.gate_on,
         "privacy_latch": coord.privacy_latch_active,
         "privacy_bed": coord.privacy_bed_active,
@@ -94,6 +97,7 @@ def _status(hass: HomeAssistant, coord) -> dict[str, Any]:
             "heat_temp_c": HEAT_TEMP_C,
             "heat_sun_min_deg": HEAT_SUN_MIN_DEG,
             "heat_lux_min": coord.heat_lux_min,
+            "heat_lux_min_ignored": True,
             "privacy_latch_lux": PRIVACY_LATCH_LUX,
             "open_weekday_min_minutes": OPEN_WEEKDAY_MIN_MINUTES,
             "open_weekend_min_minutes": OPEN_WEEKEND_MIN_MINUTES,
