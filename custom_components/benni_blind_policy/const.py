@@ -140,15 +140,13 @@ GATE_DAY_STATES: Final = frozenset(
 )
 
 HEAT_TEMP_C: Final = 24               # Temperaturklasse ≥ 12 ≙ ≥ 24 °C
-HEAT_SUN_MIN_DEG: Final = 5           # Heat Sonnenhöhe > 5°
-# Heat-Trigger: Temperatur + Sonnenhöhe sind ausschlaggebend (Sonne im Sommer bis
-# ~16:00 = Elevation > 5°). Lux ist nur ein niedriger „nicht dunkel"-Floor gegen
-# echte Bewölkung/Nacht — NICHT der harte 20k-Gate von zuvor (der blockierte an
-# hellen Hitzetagen zu oft, live 2026-08-04: 17.7k lx bei 35 °C → Heat blieb aus).
-# Der Floor ist per Config/Panel frei einstellbar (0 = nur Temp+Sonne).
-DEFAULT_HEAT_LUX_MIN: Final = 10000   # Default-Floor; live editierbar via CONF_HEAT_LUX_MIN
-# Heat endet mit afternoon — fällt weg, sobald early_evening beginnt (User 2026-06-27:
-# early_evening war zu lang). Phasen-Mengentest, keine Uhrzeit.
+HEAT_SUN_MIN_DEG: Final = 5           # Legacy-Diagnosewert; Sonne steuert nur Glare
+# Issue #9: Thermal wird ausschließlich aus dem kanonischen Temperatureingang
+# abgeleitet. Die historischen Sonnen-/Tagesphasen-/Lux-Konstanten bleiben als
+# kompatible Diagnosewerte erhalten; sie steuern nur den Glare-Pfad.
+DEFAULT_HEAT_LUX_MIN: Final = 10000   # Legacy-Default; bleibt API-kompatibel, ohne Thermal-Effekt
+# Legacy-Diagnosemenge aus der v1-Spezifikation; die gemeinsame Thermal-Auswertung
+# verwendet sie nicht mehr. Tagesphasen bleiben Bestandteil des Glare-Gates.
 HEAT_DAY_STATES: Final = frozenset(
     {PHASE_LATE_MORNING, PHASE_FORENOON, PHASE_AFTERNOON}
 )
@@ -201,7 +199,7 @@ CORE_WINDOW_OPEN_ATTRIBUTE: Final = "living"
 # Options.
 CONF_APPLY_ENABLED: Final = "apply_enabled"
 CONF_STARTUP_BLOCK_SECONDS: Final = "startup_block_seconds"
-CONF_HEAT_LUX_MIN: Final = "heat_lux_min"            # Heat-Lux-Floor (0 = nur Temp+Sonne)
+CONF_HEAT_LUX_MIN: Final = "heat_lux_min"            # Legacy-Option, Thermal ignoriert sie
 CONF_POSITION_PROFILE: Final = "position_profile"    # dict mode -> position (Normal-Achse)
 CONF_POSITION_PROFILE_INVERTED: Final = "position_profile_inverted"  # dict mode -> position (Invert-Achse)
 CONF_INVERT_POSITION: Final = "invert_position"      # True = invertiertes Profil aktiv

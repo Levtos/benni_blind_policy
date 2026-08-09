@@ -15,6 +15,7 @@ Eigenständige Helfer-Booleans (privacy_bed, alarm_wakeup) leben hier und werden
 from __future__ import annotations
 
 import logging
+import math
 import time
 from datetime import timedelta
 from typing import Any
@@ -91,7 +92,8 @@ def _float_or_none(s: str | None) -> float | None:
     if s in (None, "", "unknown", "unavailable"):
         return None
     try:
-        return float(s)
+        value = float(s)
+        return value if math.isfinite(value) else None
     except (TypeError, ValueError):
         return None
 
@@ -112,6 +114,7 @@ class BlindPolicyCoordinator:
 
         # --- persistenter / abgeleiteter State ---
         self._prev_gate: bool | None = None
+        self._prev_thermal_active: bool | None = None
         self._privacy_latch = False
         self._privacy_bed = False
         self._alarm_wakeup = False
@@ -359,6 +362,7 @@ class BlindPolicyCoordinator:
     async def async_load(self) -> None:
         raw = await self._store.async_load() or {}
         self._prev_gate = raw.get("prev_gate")
+        self._prev_thermal_active = raw.get("prev_thermal_active")
         self._privacy_latch = bool(raw.get("privacy_latch", False))
         self._privacy_bed = bool(raw.get("privacy_bed", False))
         self._alarm_wakeup = bool(raw.get("alarm_wakeup", False))
@@ -374,6 +378,7 @@ class BlindPolicyCoordinator:
     async def _async_save(self) -> None:
         await self._store.async_save({
             "prev_gate": self._prev_gate,
+            "prev_thermal_active": self._prev_thermal_active,
             "privacy_latch": self._privacy_latch,
             "privacy_bed": self._privacy_bed,
             "alarm_wakeup": self._alarm_wakeup,
@@ -653,7 +658,13 @@ class BlindPolicyCoordinator:
             apply_enabled=self.apply_enabled,
             manual_override_active=self._manual_override,
             heat_lux_min=self.heat_lux_min,
+            previous_thermal_active=self._prev_thermal_active,
         )
+
+        # Nur ein numerischer Temperatureingang darf den latched Thermal-State
+        # aktualisieren; unknown/unavailable hält einen zuvor gültigen Zustand.
+        if ctx.outdoor_temp is not None and decision.protection_demand is not None:
+            self._prev_thermal_active = decision.protection_demand.thermal_active
 
         # R1 absolut: window_open darf einen Override löschen (auch expliziten).
         if decision.manual_override_cleared:

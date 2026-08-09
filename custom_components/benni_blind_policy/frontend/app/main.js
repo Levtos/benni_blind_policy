@@ -22,8 +22,8 @@ const MODE_LABEL = {
 };
 
 const RULE_LABEL = {
-  R1: "window_open", R2: "privacy_bed", R3: "alarm_wakeup", R4: "heat",
-  R5: "sleep", R6: "privacy", R7: "glare_tv", R8: "glare_pc", R9: "open",
+  R1: "window_open", R2: "privacy_bed", R3: "alarm_wakeup", R4: "sleep",
+  R5: "privacy", R6: "protection", R7: "glare_tv", R8: "glare_pc", R9: "open",
 };
 
 const PRESENCE_LABEL = { nicht_leer: "Anwesend", leer: "Niemand da" };
@@ -34,15 +34,15 @@ const fmtK = (n) => (n % 1000 === 0 ? `${n / 1000}k` : `${(n / 1000).toFixed(1)}
 
 /** Kurz-Bedingung je Regel ("ab wann greift sie"), parametriert mit den Live-Schwellen. */
 function ruleConditions(thr = {}) {
-  const { gate_open_lux: go, gate_sun_min_deg: gs, heat_temp_c: ht, heat_sun_min_deg: hs,
-    heat_lux_min: hl, privacy_latch_lux: pl } = thr;
+  const { gate_open_lux: go, gate_sun_min_deg: gs, heat_temp_c: ht,
+    privacy_latch_lux: pl } = thr;
   return {
     R1: "Fenster offen — absolut (Safety)",
     R2: "Privacy-Bett-Schalter an",
     R3: "Wecker-Schalter an",
-    R4: `≥ ${hl != null ? fmtK(hl) : "10k"} lx + ≥ ${ht ?? "?"} °C + Sonne > ${hs ?? "?"}° + late_morning bis afternoon`,
-    R5: "Bio = sleep ODER Nachtphase",
-    R6: `Haushalt leer ODER Privacy-Latch (Latch abends < ${pl ?? "?"} lx)`,
+    R4: "Bio = sleep ODER Nachtphase",
+    R5: `Haushalt leer ODER Privacy-Latch (Latch abends < ${pl ?? "?"} lx)`,
+    R6: `Thermal ≥ ${ht ?? "?"} °C unabhängig von Wetter/Lux/Sonne · Glare: Gate > ${go != null ? fmtK(go) : "?"} lx + Sonne > ${gs ?? "?"}°`,
     R7: `Lux-Gate an (> ${go != null ? fmtK(go) : "?"} lx) + TV/Streaming/Gaming + nicht PC`,
     R8: `Lux-Gate an (> ${go != null ? fmtK(go) : "?"} lx) + Gaming am PC`,
     R9: "Fallback — trifft immer zu",
@@ -209,26 +209,27 @@ class BbpApp extends HTMLElement {
     const pp = s.position_profile || {};
     const ppi = s.position_profile_inverted || {};
     const thr = s.thresholds || {};
-    const winRule = (s.trace || []).find((e) => e.matched);
+    const protection = s.protection_demand || {};
+    const winRule = (s.trace || []).find((e) => e.matched && e.candidate !== false);
     const cond = ruleConditions(thr);
-    // R5 (heat) bekommt statt statischem Bedingungstext ein editierbares Lux-Floor-
-    // Feld: Temp+Sonne+Tagphase sind fix, nur der „nicht dunkel"-Floor ist einstellbar
-    // (0 = rein Temp+Sonne). Der _isEditing()-Guard schützt die Eingabe vor dem Poll.
-    const heatCond = (t) =>
-      `≥ <span class="luxedit"><input type="number" id="heatlux" min="0" step="500" value="${t.heat_lux_min ?? 10000}"><span class="u">lx</span>`
-      + `<button id="heatlux_save" title="Lux-Floor speichern (0 = nur Temp+Sonne)">✎</button></span>`
-      + ` + ≥ ${t.heat_temp_c ?? "?"} °C + Sonne > ${t.heat_sun_min_deg ?? "?"}° + late_morning..afternoon`;
     const trace = (s.trace || []).map((e) => {
-      const m = RULE_LABEL[e.rule] || e.mode;
+      const isProtection = e.rule === "R6";
+      // R6 is one fused policy row, but its editable profile key remains the
+      // effective mode (heat/glare_tv/glare_pc) for backwards-compatible WS data.
+      const profileMode = isProtection && e.mode === "protection" ? "heat" : (e.mode || RULE_LABEL[e.rule]);
+      const m = isProtection ? "protection" : (RULE_LABEL[e.rule] || e.mode);
       const isWin = winRule && e.rule === winRule.rule;
-      const nv = pp[m], iv = ppi[m];
+      const nv = pp[profileMode], iv = ppi[profileMode];
       const nAct = (!inv && isWin) ? "cellact" : "";
       const iAct = (inv && isWin) ? "cellact" : "";
-      const condHtml = e.rule === "R4" ? heatCond(thr) : (cond[e.rule] || "");
+      const displayName = isProtection
+        ? `Schutzanforderung${protection.effective_mode ? ` (${MODE_LABEL[protection.effective_mode] || protection.effective_mode})` : ""}`
+        : (MODE_LABEL[m] || m);
+      const condHtml = cond[e.rule] || "";
       return `<div class="trow ${isWin ? "win" : ""}">
         <span class="dot ${isWin ? "win" : e.matched ? "true" : ""}"></span>
         <span class="rid">${e.rule}</span>
-        <div class="nmwrap"><span class="nm">${m}${isWin ? ` <span class="aktiv">AKTIV</span>` : ""}</span><span class="cond">${condHtml}</span></div>
+        <div class="nmwrap"><span class="nm">${displayName}${isWin ? ` <span class="aktiv">AKTIV</span>` : ""}</span><span class="cond">${condHtml}</span></div>
         <span class="ppcell ${nAct}"><input type="number" min="0" max="100" step="5" id="n_${m}" value="${nv ?? ""}"><span class="pct">%</span></span>
         <span class="ppcell ${iAct}"><input type="number" min="0" max="100" step="5" id="i_${m}" value="${iv ?? ""}"><span class="pct">%</span></span>
         <button class="rowedit" id="e_${m}" title="Zeile speichern">✎</button>
@@ -236,14 +237,14 @@ class BbpApp extends HTMLElement {
     }).join("");
     const inputs = [
       ["Außenhelligkeit", c.lux != null ? c.lux + " lx" : "—",
-        thr.gate_open_lux ? `Gate: > ${fmtK(thr.gate_open_lux)} auf / < ${fmtK(thr.gate_close_lux)} zu · Heat-Floor: ${thr.heat_lux_min != null ? (thr.heat_lux_min > 0 ? "≥ " + fmtK(thr.heat_lux_min) : "aus") : "?"}` : ""],
+        thr.gate_open_lux ? `Glare-Gate: > ${fmtK(thr.gate_open_lux)} auf / < ${fmtK(thr.gate_close_lux)} zu` : ""],
       ["Day State", c.day_state || "—", ""],
       ["Day Context", c.day_context || "—", ""],
       ["Media Scenario", c.media_scenario || "—", "TV/Streaming/Gaming → Glare (mit Lux-Gate)"],
       ["Gaming Source", c.gaming_source || "—", "pc → glare_pc, sonst glare_tv"],
       ["Sonnenhöhe", c.sun_elevation != null ? c.sun_elevation + "°" : "—",
-        thr.gate_sun_min_deg ? `> ${thr.gate_sun_min_deg}° für Gate & Heat` : ""],
-      ["Wetterlage", c.weather_condition || "—", "nur Info — Heat nutzt Temp+Sonne+Lux"],
+        thr.gate_sun_min_deg ? `> ${thr.gate_sun_min_deg}° nur für Glare-Gate` : ""],
+      ["Wetterlage", c.weather_condition || "—", "nur Info — Thermal nutzt ausschließlich Temperatur"],
       ["Außentemperatur", c.outdoor_temp != null ? c.outdoor_temp + " °C" : "—",
         thr.heat_temp_c ? `Heat ab ≥ ${thr.heat_temp_c} °C` : ""],
       ["Bio-State", c.bio_state || "—", ""],
@@ -257,6 +258,7 @@ class BbpApp extends HTMLElement {
       profile: s.profile, mode: s.mode, position: pos, reason: s.reason,
       gate_active: s.gate_on, apply_enabled: s.apply_enabled,
       apply_allowed: s.apply_allowed, blockers: s.blockers,
+      protection_demand: protection,
       writing_active: s.writing_active, cover: s.cover,
     }, null, 2);
 
@@ -287,6 +289,8 @@ class BbpApp extends HTMLElement {
         ${this._badge("Privacy-Latch", s.privacy_latch)}
         ${this._badge("Manual Override", s.manual_override)}
         ${this._badge("Lux-Gate", s.gate_on)}
+        ${this._badge("Thermal", protection.thermal_active)}
+        ${this._badge("Glare", protection.glare_active)}
         ${this._badge("Writing aktiv", s.writing_active)}
         ${this._badge("Apply aktiv", s.apply_enabled)}
         ${this._badge("Achse invertiert", s.invert_position)}
@@ -368,26 +372,23 @@ class BbpApp extends HTMLElement {
     // Pro-Zeile: Stift speichert Normal + Invertiert dieses Modus unabhängig.
     const clamp = (v) => Math.max(0, Math.min(100, Number(v)));
     (s.trace || []).forEach((e) => {
-      const m = RULE_LABEL[e.rule] || e.mode;
-      const btn = $("e_" + m);
+      const profileMode = e.rule === "R6" && e.mode === "protection"
+        ? "heat"
+        : (e.mode || RULE_LABEL[e.rule]);
+      const uiMode = e.rule === "R6" ? "protection" : profileMode;
+      const btn = $("e_" + uiMode);
       if (!btn) return;
       btn.onclick = () => {
-        const nEl = $("n_" + m), iEl = $("i_" + m);
+        const nEl = $("n_" + uiMode), iEl = $("i_" + uiMode);
         const np = {}, ip = {};
-        if (nEl && nEl.value !== "") np[m] = clamp(nEl.value);
-        if (iEl && iEl.value !== "") ip[m] = clamp(iEl.value);
+        if (nEl && nEl.value !== "") np[profileMode] = clamp(nEl.value);
+        if (iEl && iEl.value !== "") ip[profileMode] = clamp(iEl.value);
         this._call("benni_blind_policy/set_position_profile",
           { position_profile: np, position_profile_inverted: ip });
       };
     });
     const reset = $("ppreset");
     if (reset) reset.onclick = () => this._call("benni_blind_policy/reset_position_profile");
-    const hlSave = $("heatlux_save");
-    if (hlSave) hlSave.onclick = () => {
-      const el = $("heatlux");
-      if (el && el.value !== "")
-        this._call("benni_blind_policy/set_heat_lux_min", { lux: Math.max(0, Math.round(Number(el.value))) });
-    };
     const copy = $("dbgcopy");
     if (copy) copy.onclick = () => { try { navigator.clipboard.writeText(debug); copy.textContent = "✓ Kopiert"; } catch (_) {} };
   }

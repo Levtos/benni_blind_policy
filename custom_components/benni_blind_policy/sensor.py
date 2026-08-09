@@ -81,6 +81,7 @@ class DebugSensor(BlindPolicyEntity, SensorEntity):
     def extra_state_attributes(self):
         d = self.coord.last_decision
         ctx = self.coord.build_context()
+        protection = d.protection_demand.as_dict() if d and d.protection_demand else None
         attrs = {
             "active_mode": d.mode if d else None,
             "active_position": d.target_position if d else None,
@@ -104,7 +105,14 @@ class DebugSensor(BlindPolicyEntity, SensorEntity):
             "profile": self.coord.profile_route,
             "apply_enabled": self.coord.apply_enabled,
             "blockers": list(d.blockers) if d else [],
+            "protection_demand": protection,
         }
+        if protection:
+            attrs.update({
+                "thermal_active": protection["thermal_active"],
+                "glare_active": protection["glare_active"],
+                "effective_protection_position": protection["effective_target_position"],
+            })
         if d:
             attrs["trace"] = [e.__dict__ for e in d.trace]
         return attrs
