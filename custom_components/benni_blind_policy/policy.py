@@ -36,6 +36,8 @@ from .const import (
     GATE_DAY_STATES,
     GATE_OPEN_LUX,
     GATE_SUN_MIN_DEG,
+    HEAT_DAY_STATES,
+    HEAT_SUN_MIN_DEG,
     HEAT_TEMP_C,
     HOUSEHOLD_EMPTY,
     HOUSEHOLD_NOT_EMPTY,
@@ -52,6 +54,7 @@ from .const import (
     MODE_WINDOW_OPEN,
     PHASE_EARLY_MORNING,
     PHASE_EARLY_NIGHT,
+    PHASE_LATE_AFTERNOON,
     PHASE_LATE_EVENING,
     PHASE_LATE_NIGHT,
     PRIVACY_LATCH_LUX,
@@ -77,7 +80,7 @@ class Context:
 
     window_open: bool | None = None          # True = Flügel offen (Status 2)
     bio_state: str | None = None             # sleep / waking / awake
-    day_state: str | None = None             # 8 Tagesphasen — Pflichtquelle
+    day_state: str | None = None             # kanonische Tagesphase — Pflichtquelle
     day_context: str | None = None           # werktag / wochenende / frei
     presence_household: str | None = None    # leer / nicht_leer
     privacy_bed: bool = False                # input_boolean (Hue Dimmer)
@@ -143,6 +146,7 @@ class RuleEval:
     matched: bool
     position: int | None
     candidate: bool = True
+    reason: str | None = None
 
 
 @dataclass(frozen=True)
@@ -229,6 +233,7 @@ class Decision:
                     "matched": e.matched,
                     "position": e.position,
                     "candidate": e.candidate,
+                    "reason": e.reason,
                 }
                 for e in self.trace
             ],
@@ -248,7 +253,7 @@ def lux_gate(
     """True = Gate offen (Glare-Schutz erlaubt).
 
     Vollständige Bedingung: Schmitt-Trigger (20k/15k) UND Sonnenhöhe > 5° UND
-    Day State in {early_morning, late_morning, forenoon, afternoon}. Grauzone
+    Day State in the canonical daytime phases. Grauzone
     15–20k lx hält den vorherigen Zustand (``this.state``-basiert); Lux unknown
     hält ebenfalls. Heat nutzt dieses Gate NICHT.
     """
@@ -320,18 +325,67 @@ def _valid_temperature(value: float | None) -> bool:
         return False
 
 
+def _valid_numeric(value: float | None) -> bool:
+    try:
+        return value is not None and math.isfinite(float(value))
+    except (TypeError, ValueError):
+        return False
+
+
+def _heat_lux_threshold(value: int) -> int:
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return DEFAULT_HEAT_LUX_MIN
+
+
+def _thermal_solar_eligibility(
+    n: _Norm,
+    heat_lux_min: int,
+) -> tuple[bool | None, str]:
+    """Bewertet die bestehende direkte-Sonne-Eignung für Heat.
+
+    ``None`` bedeutet, dass ein kanonischer Solar-Eingang vorübergehend nicht
+    verfügbar ist. Ein solcher Zustand darf einen bereits gültigen Thermal-
+    Zustand nicht löschen, darf aber selbst keinen neuen gültigen Zustand
+    erzeugen.
+    """
+    if not _valid_numeric(n.lux) or not _valid_numeric(n.sun_elevation) or n.day_state is None:
+        return None, "solar:eingang_unverfügbar"
+
+    lux_threshold = _heat_lux_threshold(heat_lux_min)
+    lux_value = float(n.lux)
+    sun_value = float(n.sun_elevation)
+    if lux_value < lux_threshold:
+        return False, f"solar:lux < {lux_threshold} lx"
+    if sun_value <= HEAT_SUN_MIN_DEG:
+        return False, f"solar:sonnenhöhe <= {HEAT_SUN_MIN_DEG}°"
+    if n.day_state not in HEAT_DAY_STATES:
+        return False, f"solar:phase {n.day_state} nicht für Heat geeignet"
+    return True, "solar:direkte Sonne geeignet"
+
+
 def _thermal_state(
     n: _Norm,
     previous_thermal_active: bool | None,
+    heat_lux_min: int = DEFAULT_HEAT_LUX_MIN,
 ) -> tuple[bool, str]:
-    """Thermal ausschließlich aus dem kanonischen Temperatureingang ableiten."""
+    """Thermal aus Temperatur und bestehender direkter-Sonne-Eignung ableiten."""
     if not _valid_temperature(n.outdoor_temp):
         if previous_thermal_active:
             return True, "thermal:temperature_unavailable — letzter gültiger Zustand gehalten"
         return False, "thermal:temperature_unavailable — kein gültiger Zustand erzeugt"
-    if float(n.outdoor_temp) >= HEAT_TEMP_C:
-        return True, f"thermal:temperature >= {HEAT_TEMP_C} °C"
-    return False, f"thermal:temperature < {HEAT_TEMP_C} °C"
+    if float(n.outdoor_temp) < HEAT_TEMP_C:
+        return False, f"thermal:temperature < {HEAT_TEMP_C} °C"
+
+    solar_suitable, solar_reason = _thermal_solar_eligibility(n, heat_lux_min)
+    if solar_suitable is None:
+        if previous_thermal_active:
+            return True, f"thermal:solar_unavailable — letzter gültiger Zustand gehalten ({solar_reason})"
+        return False, f"thermal:solar_unavailable — kein gültiger Zustand erzeugt ({solar_reason})"
+    if not solar_suitable:
+        return False, f"thermal:temperature >= {HEAT_TEMP_C} °C, aber {solar_reason}"
+    return True, f"thermal:temperature >= {HEAT_TEMP_C} °C + {solar_reason}"
 
 
 def _heat_active(
@@ -340,9 +394,8 @@ def _heat_active(
     *,
     previous_thermal_active: bool | None = None,
 ) -> bool:
-    """Kompatibilitäts-Wrapper: Heat hängt nicht mehr von Lux oder Sonne ab."""
-    del heat_lux_min  # Legacy-Parameter bleibt für alte interne Aufrufer erhalten.
-    return _thermal_state(n, previous_thermal_active)[0]
+    """Kompatibilitäts-Wrapper für die gemeinsame Solar-/Thermal-Auswertung."""
+    return _thermal_state(n, previous_thermal_active, heat_lux_min)[0]
 
 
 def _sleep_active(n: _Norm) -> bool:
@@ -359,8 +412,12 @@ def _build_protection_demand(
     gate_on: bool,
     profile: dict[str, int],
     previous_thermal_active: bool | None,
+    heat_lux_min: int,
 ) -> ProtectionDemand:
-    thermal_active, thermal_reason = _thermal_state(n, previous_thermal_active)
+    thermal_active, thermal_reason = _thermal_state(
+        n, previous_thermal_active, heat_lux_min
+    )
+    solar_suitable, _solar_reason = _thermal_solar_eligibility(n, heat_lux_min)
 
     glare_tv_active = bool(
         gate_on
@@ -417,8 +474,22 @@ def _build_protection_demand(
         "thermal_input": n.outdoor_temp,
         "thermal_input_available": _valid_temperature(n.outdoor_temp),
         "thermal_threshold_c": HEAT_TEMP_C,
-        "thermal_state_held": not _valid_temperature(n.outdoor_temp)
-        and bool(previous_thermal_active),
+        "thermal_lux": n.lux,
+        "thermal_lux_available": _valid_numeric(n.lux),
+        "thermal_lux_min": _heat_lux_threshold(heat_lux_min),
+        "thermal_sun_elevation": n.sun_elevation,
+        "thermal_sun_available": _valid_numeric(n.sun_elevation),
+        "thermal_phase": n.day_state,
+        "thermal_solar_suitable": solar_suitable is True,
+        "thermal_solar_state": (
+            "active" if solar_suitable is True
+            else "inactive" if solar_suitable is False
+            else "unknown"
+        ),
+        "thermal_state_held": (
+            (not _valid_temperature(n.outdoor_temp) or solar_suitable is None)
+            and bool(previous_thermal_active)
+        ),
         "glare_gate_on": bool(gate_on),
         "glare_tv_active": glare_tv_active,
         "glare_pc_active": glare_pc_active,
@@ -451,17 +522,26 @@ def evaluate_protection_demand(
     heat_lux_min: int = DEFAULT_HEAT_LUX_MIN,
 ) -> ProtectionDemand:
     """Bewertet Thermal und Glare unabhängig und fusioniert sie einmalig."""
-    del heat_lux_min  # Legacy-Option darf Thermal nicht mehr beeinflussen.
     return _build_protection_demand(
         _normalized(ctx),
         gate_on,
         _merged_profile(position_profile),
         previous_thermal_active,
+        heat_lux_min,
     )
 
 
 # Lesbarer Alias für interne/diagnostische Verbraucher.
 protection_demand = evaluate_protection_demand
+
+
+def _privacy_reason(n: _Norm) -> str:
+    reasons: list[str] = []
+    if n.presence_household == HOUSEHOLD_EMPTY:
+        reasons.append("privacy:away:household_empty")
+    if n.privacy_latch:
+        reasons.append("privacy:evening:auto_latch")
+    return " + ".join(reasons) if reasons else "privacy:inactive"
 
 
 def evaluate_chain(
@@ -480,39 +560,39 @@ def evaluate_chain(
     R7/R8 bleiben als nicht konkurrierende Glare-Diagnosezeilen sichtbar; die
     tatsächliche Schutzentscheidung kommt ausschließlich aus R6/ProtectionDemand.
     """
-    del heat_lux_min  # Legacy-Parameter; Schutz wird zentral fusioniert.
     profile = _merged_profile(position_profile)
     demand = demand or _build_protection_demand(
-        n, gate_on, profile, previous_thermal_active
+        n, gate_on, profile, previous_thermal_active, heat_lux_min
     )
     protection_mode = demand.effective_mode or "protection"
+    privacy_reason = _privacy_reason(n)
     rules: list[RuleEval] = [
-        RuleEval("R1", MODE_WINDOW_OPEN, bool(n.window_open), _position(MODE_WINDOW_OPEN, profile)),
-        RuleEval("R2", MODE_PRIVACY_BED, bool(n.privacy_bed), _position(MODE_PRIVACY_BED, profile)),
+        RuleEval("R1", MODE_WINDOW_OPEN, bool(n.window_open), _position(MODE_WINDOW_OPEN, profile), reason="window_open:Safety"),
+        RuleEval("R2", MODE_PRIVACY_BED, bool(n.privacy_bed), _position(MODE_PRIVACY_BED, profile), reason="privacy:manual:privacy_bed"),
         RuleEval(
             "R3", MODE_ALARM_WAKEUP, bool(n.alarm_wakeup),
-            _position(MODE_ALARM_WAKEUP, profile),
+            _position(MODE_ALARM_WAKEUP, profile), reason="alarm_wakeup:fachlicher Weckerzustand",
         ),
-        RuleEval("R4", MODE_SLEEP, _sleep_active(n), _position(MODE_SLEEP, profile)),
+        RuleEval("R4", MODE_SLEEP, _sleep_active(n), _position(MODE_SLEEP, profile), reason="sleep:Bio- oder Nachtzustand"),
         RuleEval(
             "R5", MODE_PRIVACY,
             n.presence_household == HOUSEHOLD_EMPTY or n.privacy_latch,
-            _position(MODE_PRIVACY, profile),
+            _position(MODE_PRIVACY, profile), reason=privacy_reason,
         ),
         RuleEval(
             "R6", protection_mode, demand.active,
-            demand.effective_target_position,
+            demand.effective_target_position, reason=" | ".join(demand.reasons),
         ),
         # Nur Diagnose: Diese Einträge sind keine zusätzlichen Policy-Zweige.
         RuleEval(
             "R7", MODE_GLARE_TV, demand.glare_mode == MODE_GLARE_TV,
-            _position(MODE_GLARE_TV, profile), candidate=False,
+            _position(MODE_GLARE_TV, profile), candidate=False, reason="glare:tv:Diagnosezeile",
         ),
         RuleEval(
             "R8", MODE_GLARE_PC, demand.glare_mode == MODE_GLARE_PC,
-            _position(MODE_GLARE_PC, profile), candidate=False,
+            _position(MODE_GLARE_PC, profile), candidate=False, reason="glare:pc:Diagnosezeile",
         ),
-        RuleEval("R9", MODE_OPEN, True, _position(MODE_OPEN, profile)),  # Fallback
+        RuleEval("R9", MODE_OPEN, True, _position(MODE_OPEN, profile), reason="open:Fallback"),  # Fallback
     ]
 
     trace: list[RuleEval] = []
@@ -560,7 +640,7 @@ def decide(
     profile = _merged_profile(position_profile)
     n = _normalized(ctx)
     demand = _build_protection_demand(
-        n, gate_on, profile, previous_thermal_active
+        n, gate_on, profile, previous_thermal_active, heat_lux_min
     )
     winner, trace = evaluate_chain(
         n,
@@ -572,11 +652,12 @@ def decide(
     )
     mode = winner.mode
     position = _position(mode, profile)
-    reason = (
-        "protection: " + " | ".join(demand.reasons)
-        if demand.active and mode == demand.effective_mode
-        else _REASONS.get(mode, mode)
-    )
+    if mode in (MODE_PRIVACY, MODE_PRIVACY_BED):
+        reason = winner.reason or _REASONS.get(mode, mode)
+    elif demand.active and mode == demand.effective_mode:
+        reason = "protection: " + " | ".join(demand.reasons)
+    else:
+        reason = _REASONS.get(mode, mode)
 
     blockers: list[str] = []
     apply_allowed = True
@@ -621,7 +702,9 @@ def privacy_latch_should_set(
     prev_day_state: str | None,
     lux: float | None,
 ) -> bool:
-    """Set: Eintritt in early_night ODER lux < 400 während late_evening."""
+    """Set: Dunkel-/Nachtübergang; helles late_afternoon setzt niemals."""
+    if day_state == PHASE_LATE_AFTERNOON:
+        return False
     entered_early_night = (
         day_state == PHASE_EARLY_NIGHT and prev_day_state != PHASE_EARLY_NIGHT
     )
@@ -629,6 +712,18 @@ def privacy_latch_should_set(
         day_state == PHASE_LATE_EVENING and lux is not None and lux < PRIVACY_LATCH_LUX
     )
     return entered_early_night or dark_late_evening
+
+
+def privacy_latch_should_reset_for_daylight(
+    day_state: str | None,
+    lux: float | None,
+) -> bool:
+    """Helles late_afternoon löscht ausschließlich den automatischen Latch."""
+    return (
+        day_state == PHASE_LATE_AFTERNOON
+        and _valid_numeric(lux)
+        and float(lux) >= PRIVACY_LATCH_LUX
+    )
 
 
 def privacy_latch_recovery(day_state: str | None, lux: float | None) -> bool:

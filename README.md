@@ -39,12 +39,15 @@ Quellen (core_state · core_devices · media_state · DWD)
 | R7/R8 | `glare_tv` / `glare_pc` | 60/75 | Diagnosezeilen, keine konkurrierenden Policy-Zweige |
 | R9 | `open` | 100 | Fallback |
 
-**ProtectionDemand**: Thermal wird ausschließlich über den bestehenden kanonischen
-Temperatureingang ab der unveränderten Schwelle bewertet. Glare nutzt weiterhin
-Lux-Schmitt (20.000/15.000 lx), Sonnenwinkel, Tagesphase und Media-/Gaming-Kontext.
-Ein transienter `unknown`-/`unavailable`-Wert löscht keinen gültigen Gate- oder
-Thermal-Zustand; numerische Werte lösen die Neubewertung sofort aus. Die ausführliche
-Entscheidung steht in [`docs/adr/0001-heat-glare-protection-demand.md`](docs/adr/0001-heat-glare-protection-demand.md).
+**ProtectionDemand**: Thermal benötigt den bestehenden kanonischen
+Temperatureingang ab der unveränderten Schwelle sowie direkte Solar-Eignung aus
+Heat-Lux-Floor, Sonnenwinkel und Heat-Phasen. Glare nutzt weiterhin Lux-Schmitt
+(20.000/15.000 lx), Sonnenwinkel, Tagesphase und Media-/Gaming-Kontext. Ein
+transienter `unknown`-/`unavailable`-Wert löscht keinen gültigen Gate- oder
+Thermal-Zustand; numerische Werte lösen die Neubewertung sofort aus. Helles
+`late_afternoon` löscht nur den automatischen Evening-Privacy-Latch. Die
+ausführliche Entscheidung steht in
+[`docs/adr/0001-heat-glare-protection-demand.md`](docs/adr/0001-heat-glare-protection-demand.md).
 
 ## Output-Entities (Profil benni)
 

@@ -184,7 +184,7 @@ class BlindPolicyCoordinator:
 
     @property
     def heat_lux_min(self) -> int:
-        """Konfigurierbarer Heat-Lux-Floor (0 = nur Temp+Sonne). Nie negativ."""
+        """Bestehender Heat-Lux-Floor (0 deaktiviert nur diesen Floor)."""
         try:
             return max(0, int(self._opt(CONF_HEAT_LUX_MIN, DEFAULT_HEAT_LUX_MIN)))
         except (TypeError, ValueError):
@@ -530,7 +530,17 @@ class BlindPolicyCoordinator:
             sun_above = sun_state == "above_horizon"
         sunrise_crossed = bool(self._prev_sun_above is False and sun_above is True)
 
-        if not self._privacy_latch:
+        bright_late_afternoon = policy.privacy_latch_should_reset_for_daylight(
+            ctx.day_state, ctx.lux
+        )
+
+        # Der helle late_afternoon-Übergang löscht ausschließlich den
+        # automatisch gesetzten Evening-Latch. Die explizite privacy_bed-Quelle
+        # bleibt unangetastet; durch den exklusiven Pfad kann der Latch in
+        # derselben Phase nicht direkt wieder gesetzt werden.
+        if bright_late_afternoon:
+            self._privacy_latch = False
+        elif not self._privacy_latch:
             if policy.privacy_latch_should_set(ctx.day_state, self._prev_day_state, ctx.lux):
                 self._privacy_latch = True
                 # Seiteneffekt R-PL: Privacy-Bed-Reset (obsolet beim Latch-Set).

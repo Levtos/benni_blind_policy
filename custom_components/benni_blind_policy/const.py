@@ -119,11 +119,14 @@ GAMING_NONE: Final = "none"
 
 WEATHER_SUNNY: Final = "sunny"
 
-# 8 Tagesphasen.
+# Kanonische Tagesphasen.
 PHASE_EARLY_MORNING: Final = "early_morning"
 PHASE_LATE_MORNING: Final = "late_morning"
 PHASE_FORENOON: Final = "forenoon"
 PHASE_AFTERNOON: Final = "afternoon"
+# Canonical transition phase consumed by the current day-state source. It is an
+# internal enum value; no new Home-Assistant entity or configuration is added.
+PHASE_LATE_AFTERNOON: Final = "late_afternoon"
 PHASE_EARLY_EVENING: Final = "early_evening"
 PHASE_LATE_EVENING: Final = "late_evening"
 PHASE_EARLY_NIGHT: Final = "early_night"
@@ -136,17 +139,22 @@ GATE_OPEN_LUX: Final = 20000          # Gate öffnet > 20.000 lx
 GATE_CLOSE_LUX: Final = 15000         # Gate schließt < 15.000 lx
 GATE_SUN_MIN_DEG: Final = 5           # Sonnenhöhe > 5° (Gate)
 GATE_DAY_STATES: Final = frozenset(
-    {PHASE_EARLY_MORNING, PHASE_LATE_MORNING, PHASE_FORENOON, PHASE_AFTERNOON}
+    {
+        PHASE_EARLY_MORNING,
+        PHASE_LATE_MORNING,
+        PHASE_FORENOON,
+        PHASE_AFTERNOON,
+        PHASE_LATE_AFTERNOON,
+    }
 )
 
 HEAT_TEMP_C: Final = 24               # Temperaturklasse ≥ 12 ≙ ≥ 24 °C
-HEAT_SUN_MIN_DEG: Final = 5           # Legacy-Diagnosewert; Sonne steuert nur Glare
-# Issue #9: Thermal wird ausschließlich aus dem kanonischen Temperatureingang
-# abgeleitet. Die historischen Sonnen-/Tagesphasen-/Lux-Konstanten bleiben als
-# kompatible Diagnosewerte erhalten; sie steuern nur den Glare-Pfad.
-DEFAULT_HEAT_LUX_MIN: Final = 10000   # Legacy-Default; bleibt API-kompatibel, ohne Thermal-Effekt
-# Legacy-Diagnosemenge aus der v1-Spezifikation; die gemeinsame Thermal-Auswertung
-# verwendet sie nicht mehr. Tagesphasen bleiben Bestandteil des Glare-Gates.
+# Bestehende direkte-Sonne-Eignung für Heat; die Temperaturschwelle bleibt davon
+# unabhängig unverändert und wird mit diesen Solarbedingungen kombiniert.
+HEAT_SUN_MIN_DEG: Final = 5
+DEFAULT_HEAT_LUX_MIN: Final = 10000
+# late_afternoon bleibt außerhalb der bestehenden Heat-Phasen; dadurch kann die
+# Übergangsphase bei moderatem Tageslicht nicht allein wegen Wärme schließen.
 HEAT_DAY_STATES: Final = frozenset(
     {PHASE_LATE_MORNING, PHASE_FORENOON, PHASE_AFTERNOON}
 )
@@ -199,7 +207,7 @@ CORE_WINDOW_OPEN_ATTRIBUTE: Final = "living"
 # Options.
 CONF_APPLY_ENABLED: Final = "apply_enabled"
 CONF_STARTUP_BLOCK_SECONDS: Final = "startup_block_seconds"
-CONF_HEAT_LUX_MIN: Final = "heat_lux_min"            # Legacy-Option, Thermal ignoriert sie
+CONF_HEAT_LUX_MIN: Final = "heat_lux_min"            # Bestehender Heat-Lux-Floor
 CONF_POSITION_PROFILE: Final = "position_profile"    # dict mode -> position (Normal-Achse)
 CONF_POSITION_PROFILE_INVERTED: Final = "position_profile_inverted"  # dict mode -> position (Invert-Achse)
 CONF_INVERT_POSITION: Final = "invert_position"      # True = invertiertes Profil aktiv

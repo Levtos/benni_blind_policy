@@ -206,7 +206,7 @@ def test_waking_treated_like_awake_not_sleep():
 
 
 # --------------------------------------------------------------------------- #
-# Heat (in-policy, kein Lux-Gate)
+# Heat (in-policy, mit bestehender direkter Solar-Eignung)
 # --------------------------------------------------------------------------- #
 def test_heat_active():
     d = decide(ctx(day_state=const.PHASE_FORENOON, lux=30000,
@@ -223,6 +223,38 @@ def test_heat_active_partlycloudy_but_bright():
     assert d.mode == const.MODE_HEAT
 
 
+def test_late_afternoon_warm_but_moderately_bright_stays_open():
+    d = decide(
+        ctx(
+            day_state=const.PHASE_LATE_AFTERNOON,
+            lux=5000,
+            sun_elevation=20,
+            outdoor_temp=30,
+            presence_household=const.HOUSEHOLD_NOT_EMPTY,
+        )
+    )
+    assert d.mode == const.MODE_OPEN
+    assert d.target_position == 100
+    assert d.protection_demand is not None
+    assert d.protection_demand.thermal_active is False
+    assert d.protection_demand.glare_active is False
+    assert d.protection_demand.effective_target_position is None
+
+
+def test_late_afternoon_cleared_auto_latch_allows_open_fallback():
+    d = decide(
+        ctx(
+            day_state=const.PHASE_LATE_AFTERNOON,
+            lux=5000,
+            sun_elevation=20,
+            outdoor_temp=30,
+            privacy_latch=False,
+        )
+    )
+    assert d.mode == const.MODE_OPEN
+    assert d.reason.startswith("open:")
+
+
 @pytest.mark.parametrize("day_state", [
     const.PHASE_LATE_MORNING,
     const.PHASE_FORENOON,
@@ -234,10 +266,12 @@ def test_heat_active_from_late_morning_to_afternoon(day_state):
     assert d.mode == const.MODE_HEAT
 
 
-def test_heat_is_independent_of_day_phase():
+def test_heat_requires_a_suitable_solar_phase_and_angle():
     d = decide(ctx(day_state=const.PHASE_EARLY_EVENING, lux=30000,
                    outdoor_temp=25, sun_elevation=0))
-    assert d.mode == const.MODE_HEAT
+    assert d.mode == const.MODE_OPEN
+    assert d.protection_demand is not None
+    assert d.protection_demand.thermal_active is False
 
 
 def test_heat_beats_daytime_open_workday():
@@ -256,18 +290,20 @@ def test_heat_beats_daytime_open_weekend():
     assert d.mode == const.MODE_HEAT
 
 
-def test_heat_ignores_weather_lux_and_sun_angle():
-    # Thermischer Schutz bleibt auch bei Regen, Dunkelheit und tiefem Sonnenwinkel aktiv.
+def test_heat_requires_direct_sun_even_when_weather_is_rainy():
     d = decide(ctx(day_state=const.PHASE_FORENOON, weather_condition="rainy",
                    lux=5000, outdoor_temp=30, sun_elevation=0))
-    assert d.mode == const.MODE_HEAT
+    assert d.mode == const.MODE_OPEN
+    assert d.protection_demand is not None
+    assert d.protection_demand.thermal_active is False
 
 
-def test_heat_does_not_need_lux_present():
-    # Lux unknown/unavailable beeinflusst ausschließlich Glare.
+def test_heat_does_not_create_state_without_solar_inputs():
     d = decide(ctx(day_state=const.PHASE_FORENOON, weather_condition="cloudy",
                    lux=None, outdoor_temp=25, sun_elevation=None))
-    assert d.mode == const.MODE_HEAT
+    assert d.mode == const.MODE_OPEN
+    assert d.protection_demand is not None
+    assert d.protection_demand.thermal_active is False
 
 
 def test_heat_needs_warm_enough():
@@ -276,16 +312,16 @@ def test_heat_needs_warm_enough():
     assert d.mode != const.MODE_HEAT
 
 
-def test_heat_does_not_need_sun_above_5():
+def test_heat_needs_sun_above_5():
     d = decide(ctx(day_state=const.PHASE_FORENOON, lux=30000,
                    outdoor_temp=25, sun_elevation=4))
-    assert d.mode == const.MODE_HEAT
+    assert d.mode == const.MODE_OPEN
 
 
-def test_heat_is_independent_of_late_evening():
+def test_heat_does_not_activate_in_late_evening():
     d = decide(ctx(day_state=const.PHASE_LATE_EVENING, lux=30000,
                    outdoor_temp=25, sun_elevation=20))
-    assert d.mode == const.MODE_HEAT
+    assert d.mode == const.MODE_OPEN
 
 
 def test_heat_beats_daytime_sleep():
@@ -296,33 +332,31 @@ def test_heat_beats_daytime_sleep():
 
 
 # --------------------------------------------------------------------------- #
-# Legacy-Heat-Lux-Floor bleibt API-kompatibel, steuert Thermal aber nicht mehr.
+# Bestehender Heat-Lux-Floor bleibt API-kompatibel und ist Teil der Solar-Eignung.
 # --------------------------------------------------------------------------- #
-def test_heat_legacy_lux_floor_does_not_change_thermal():
+def test_heat_lux_floor_controls_solar_eligibility():
     assert const.DEFAULT_HEAT_LUX_MIN == 10000
     warm = dict(day_state=const.PHASE_FORENOON, outdoor_temp=25, sun_elevation=20)
-    assert decide(ctx(lux=9000, **warm), heat_lux_min=25000).mode == const.MODE_HEAT
+    assert decide(ctx(lux=9000, **warm), heat_lux_min=25000).mode == const.MODE_OPEN
     assert decide(ctx(lux=11000, **warm)).mode == const.MODE_HEAT
 
 
-def test_heat_legacy_lux_floor_is_ignored():
+def test_heat_lux_floor_allows_sufficient_brightness():
     d = decide(ctx(day_state=const.PHASE_FORENOON, lux=17700,
                    outdoor_temp=35, sun_elevation=51), heat_lux_min=10000)
     assert d.mode == const.MODE_HEAT
 
 
-def test_heat_lux_floor_zero_is_temp_sun_only():
-    # Legacy-Floor 0 bleibt ohne Einfluss; auch ein tiefer Sonnenwinkel blockiert nicht.
-    d = decide(ctx(day_state=const.PHASE_FORENOON, lux=None,
-                   outdoor_temp=25, sun_elevation=0), heat_lux_min=0)
+def test_heat_lux_floor_zero_still_requires_sun_and_phase():
+    d = decide(ctx(day_state=const.PHASE_FORENOON, lux=1,
+                   outdoor_temp=25, sun_elevation=20), heat_lux_min=0)
     assert d.mode == const.MODE_HEAT
 
 
-def test_heat_lux_floor_high_blocks():
-    # Ein hoher historischer Floor darf den thermischen Schutz nicht mehr blockieren.
+def test_heat_lux_floor_high_blocks_without_enough_brightness():
     d = decide(ctx(day_state=const.PHASE_FORENOON, lux=17000,
                    outdoor_temp=35, sun_elevation=50), heat_lux_min=25000)
-    assert d.mode == const.MODE_HEAT
+    assert d.mode == const.MODE_OPEN
 
 
 # --------------------------------------------------------------------------- #
@@ -352,7 +386,7 @@ def test_protection_demand_heat_and_glare_use_effective_heat_position():
     assert d.target_position == demand.effective_target_position
 
 
-def test_protection_demand_heat_ignores_rain_low_lux_and_sun_angle():
+def test_protection_demand_heat_requires_solar_eligibility():
     d = decide(
         ctx(
             day_state=const.PHASE_EARLY_EVENING,
@@ -364,9 +398,10 @@ def test_protection_demand_heat_ignores_rain_low_lux_and_sun_angle():
         ),
         gate_on=False,
     )
-    assert d.mode == const.MODE_HEAT
-    assert d.target_position == 45
+    assert d.mode == const.MODE_OPEN
+    assert d.target_position == 100
     assert d.protection_demand is not None
+    assert d.protection_demand.thermal_active is False
     assert d.protection_demand.glare_active is False
 
 
@@ -388,6 +423,16 @@ def test_decision_holds_previous_thermal_state_when_temperature_is_unavailable()
     )
     assert d.mode == const.MODE_HEAT
     assert d.target_position == 45
+    assert d.protection_demand is not None
+    assert d.protection_demand.diagnostics["thermal_state_held"] is True
+
+
+def test_solar_input_outage_holds_previous_valid_thermal_state():
+    d = decide(
+        ctx(outdoor_temp=30, lux=None, sun_elevation=None),
+        previous_thermal_active=True,
+    )
+    assert d.mode == const.MODE_HEAT
     assert d.protection_demand is not None
     assert d.protection_demand.diagnostics["thermal_state_held"] is True
 
@@ -436,7 +481,10 @@ def test_low_temperature_pc_gaming_uses_only_glare_pc():
 def test_protection_demand_uses_axis_direction_for_inverted_profile():
     d = decide(
         ctx(
+            day_state=const.PHASE_FORENOON,
             outdoor_temp=30,
+            lux=30000,
+            sun_elevation=30,
             media_scenario=const.SCENARIO_TV,
         ),
         gate_on=True,
@@ -453,7 +501,8 @@ def test_protection_demand_uses_axis_direction_for_inverted_profile():
 
 def test_policy_and_diagnostic_trace_share_one_effective_protection_demand():
     d = decide(
-        ctx(outdoor_temp=30, media_scenario=const.SCENARIO_TV),
+        ctx(day_state=const.PHASE_FORENOON, outdoor_temp=30, lux=30000,
+            sun_elevation=30, media_scenario=const.SCENARIO_TV),
         gate_on=True,
     )
     payload = d.as_dict()
@@ -471,7 +520,7 @@ def test_higher_existing_priorities_still_beat_fused_protection():
 
 
 def test_unavailable_glare_input_does_not_block_valid_thermal_protection():
-    d = decide(ctx(outdoor_temp=30, media_scenario=None, lux=None, sun_elevation=None))
+    d = decide(ctx(outdoor_temp=30, media_scenario=None, lux=30000, sun_elevation=20))
     assert d.mode == const.MODE_HEAT
     assert d.protection_demand is not None
     assert d.protection_demand.thermal_active is True
@@ -609,6 +658,22 @@ def test_trace_has_all_rules_and_winner():
     assert any(e.rule == "R7" and e.matched and not e.candidate for e in d.trace)
 
 
+def test_privacy_trace_distinguishes_manual_and_automatic_reasons():
+    manual = decide(ctx(privacy_bed=True))
+    manual_trace = next(entry for entry in manual.trace if entry.rule == "R2")
+    assert manual_trace.reason == "privacy:manual:privacy_bed"
+    assert manual.reason == manual_trace.reason
+
+    automatic = decide(ctx(privacy_latch=True))
+    automatic_trace = next(entry for entry in automatic.trace if entry.rule == "R5")
+    assert automatic_trace.reason == "privacy:evening:auto_latch"
+    assert automatic.reason == automatic_trace.reason
+
+    away = decide(ctx(presence_household=const.HOUSEHOLD_EMPTY))
+    away_trace = next(entry for entry in away.trace if entry.rule == "R5")
+    assert away_trace.reason == "privacy:away:household_empty"
+
+
 # --------------------------------------------------------------------------- #
 # R-PL — Privacy-Latch-Prädikate
 # --------------------------------------------------------------------------- #
@@ -660,6 +725,24 @@ def test_manual_override_reset_on_sleep_entry():
 def test_manual_override_no_reset_without_sleep_entry():
     assert policy.manual_override_should_reset_on_sleep(
         const.BIO_SLEEP, const.BIO_SLEEP
+    ) is False
+
+
+def test_latch_never_sets_in_late_afternoon():
+    assert policy.privacy_latch_should_set(
+        const.PHASE_LATE_AFTERNOON, const.PHASE_LATE_EVENING, 5000
+    ) is False
+
+
+def test_latch_resets_for_bright_late_afternoon_only_with_numeric_lux():
+    assert policy.privacy_latch_should_reset_for_daylight(
+        const.PHASE_LATE_AFTERNOON, 5000
+    ) is True
+    assert policy.privacy_latch_should_reset_for_daylight(
+        const.PHASE_LATE_AFTERNOON, 300
+    ) is False
+    assert policy.privacy_latch_should_reset_for_daylight(
+        const.PHASE_LATE_AFTERNOON, None
     ) is False
     assert policy.manual_override_should_reset_on_sleep(
         const.BIO_AWAKE, const.BIO_SLEEP

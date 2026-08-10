@@ -35,14 +35,14 @@ const fmtK = (n) => (n % 1000 === 0 ? `${n / 1000}k` : `${(n / 1000).toFixed(1)}
 /** Kurz-Bedingung je Regel ("ab wann greift sie"), parametriert mit den Live-Schwellen. */
 function ruleConditions(thr = {}) {
   const { gate_open_lux: go, gate_sun_min_deg: gs, heat_temp_c: ht,
-    privacy_latch_lux: pl } = thr;
+    heat_sun_min_deg: hs, heat_lux_min: hl, privacy_latch_lux: pl } = thr;
   return {
     R1: "Fenster offen — absolut (Safety)",
     R2: "Privacy-Bett-Schalter an",
     R3: "Wecker-Schalter an",
     R4: "Bio = sleep ODER Nachtphase",
     R5: `Haushalt leer ODER Privacy-Latch (Latch abends < ${pl ?? "?"} lx)`,
-    R6: `Thermal ≥ ${ht ?? "?"} °C unabhängig von Wetter/Lux/Sonne · Glare: Gate > ${go != null ? fmtK(go) : "?"} lx + Sonne > ${gs ?? "?"}°`,
+    R6: `Thermal ≥ ${ht ?? "?"} °C + Solar-Lux ≥ ${hl ?? "?"} lx + Sonne > ${hs ?? "?"}° in Heat-Phase · Glare: Gate > ${go != null ? fmtK(go) : "?"} lx + Sonne > ${gs ?? "?"}°`,
     R7: `Lux-Gate an (> ${go != null ? fmtK(go) : "?"} lx) + TV/Streaming/Gaming + nicht PC`,
     R8: `Lux-Gate an (> ${go != null ? fmtK(go) : "?"} lx) + Gaming am PC`,
     R9: "Fallback — trifft immer zu",
@@ -226,10 +226,11 @@ class BbpApp extends HTMLElement {
         ? `Schutzanforderung${protection.effective_mode ? ` (${MODE_LABEL[protection.effective_mode] || protection.effective_mode})` : ""}`
         : (MODE_LABEL[m] || m);
       const condHtml = cond[e.rule] || "";
+      const reasonHtml = e.reason ? ` · ${e.reason}` : "";
       return `<div class="trow ${isWin ? "win" : ""}">
         <span class="dot ${isWin ? "win" : e.matched ? "true" : ""}"></span>
         <span class="rid">${e.rule}</span>
-        <div class="nmwrap"><span class="nm">${displayName}${isWin ? ` <span class="aktiv">AKTIV</span>` : ""}</span><span class="cond">${condHtml}</span></div>
+        <div class="nmwrap"><span class="nm">${displayName}${isWin ? ` <span class="aktiv">AKTIV</span>` : ""}</span><span class="cond">${condHtml}${reasonHtml}</span></div>
         <span class="ppcell ${nAct}"><input type="number" min="0" max="100" step="5" id="n_${m}" value="${nv ?? ""}"><span class="pct">%</span></span>
         <span class="ppcell ${iAct}"><input type="number" min="0" max="100" step="5" id="i_${m}" value="${iv ?? ""}"><span class="pct">%</span></span>
         <button class="rowedit" id="e_${m}" title="Zeile speichern">✎</button>
@@ -244,7 +245,7 @@ class BbpApp extends HTMLElement {
       ["Gaming Source", c.gaming_source || "—", "pc → glare_pc, sonst glare_tv"],
       ["Sonnenhöhe", c.sun_elevation != null ? c.sun_elevation + "°" : "—",
         thr.gate_sun_min_deg ? `> ${thr.gate_sun_min_deg}° nur für Glare-Gate` : ""],
-      ["Wetterlage", c.weather_condition || "—", "nur Info — Thermal nutzt ausschließlich Temperatur"],
+      ["Wetterlage", c.weather_condition || "—", "nur Info — Heat benötigt zusätzlich direkte Solar-Eignung"],
       ["Außentemperatur", c.outdoor_temp != null ? c.outdoor_temp + " °C" : "—",
         thr.heat_temp_c ? `Heat ab ≥ ${thr.heat_temp_c} °C` : ""],
       ["Bio-State", c.bio_state || "—", ""],

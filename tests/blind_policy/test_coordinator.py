@@ -254,3 +254,47 @@ def test_recent_apply_guard_keeps_its_eight_second_manual_override_semantics(mon
         SimpleNamespace(data={"new_state": state(55), "entity_id": "cover.test"})
     )
     assert coord.manual_override_active is True
+
+
+def test_bright_late_afternoon_clears_only_automatic_privacy_latch(monkeypatch):
+    del monkeypatch
+    coord = object.__new__(coordinator_module.BlindPolicyCoordinator)
+    coord.hass = SimpleNamespace()
+    coord._opt = lambda _key: None
+    coord._has_blind_master_state = lambda: False
+    coord._privacy_latch = True
+    coord._privacy_bed = True
+    coord._prev_day_state = const.PHASE_LATE_EVENING
+    coord._prev_bio = const.BIO_AWAKE
+    coord._prev_sun_above = None
+
+    context = coordinator_module.policy.Context(
+        day_state=const.PHASE_LATE_AFTERNOON,
+        lux=5000,
+        bio_state=const.BIO_AWAKE,
+    )
+
+    coord._update_privacy_latch(context)
+    assert coord._privacy_latch is False
+    assert coord._privacy_bed is True
+
+    decision = coordinator_module.policy.decide(
+        coordinator_module.policy.Context(
+            window_open=False,
+            day_state=const.PHASE_LATE_AFTERNOON,
+            lux=5000,
+            sun_elevation=20,
+            outdoor_temp=30,
+            privacy_latch=coord._privacy_latch,
+        ),
+        gate_on=False,
+        startup_ready=True,
+        apply_enabled=True,
+        manual_override_active=False,
+    )
+    assert decision.mode == const.MODE_OPEN
+
+    # Repeated evaluation in the same phase must not restore the latch.
+    coord._update_privacy_latch(context)
+    assert coord._privacy_latch is False
+    assert coord._privacy_bed is True
