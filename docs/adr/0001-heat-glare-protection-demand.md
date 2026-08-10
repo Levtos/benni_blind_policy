@@ -1,9 +1,10 @@
 # ADR-0001: Gemeinsame Protection Demand für Heat und Glare
 
 - Status: accepted
-- Version: 0.8.2
-- Datum: 2026-08-09
-- Issue: [#21](https://github.com/Levtos/benni_blind_policy/issues/21)
+- Version: 0.8.3
+- Datum: 2026-08-10
+- Issue: [#23](https://github.com/Levtos/benni_blind_policy/issues/23)
+- Vorgänger: [#21](https://github.com/Levtos/benni_blind_policy/issues/21)
 - Parent: [#9](https://github.com/Levtos/benni_blind_policy/issues/9)
 
 ## Entscheidung
@@ -15,17 +16,21 @@ Aktivzustände, beide fachlichen Zielpositionen, die effektive Zielposition sowi
 Gründe und Diagnosewerte. Es wird kein neuer öffentlicher Home-Assistant-Sensor
 für diese interne Fusion eingeführt.
 
-Der thermische Zustand wird ausschließlich aus dem bereits verwendeten
-kanonischen Temperatureingang und der unveränderten fachlichen Schwelle
-(`HEAT_TEMP_C`, aktuell 24 °C) abgeleitet. Wetter, Regen, Bewölkung, Lux,
-Sonnenwinkel, Medien-Szenario und Glare-Gate dürfen diesen Zustand weder
-blockieren noch abschalten. Die thermische Zielposition bleibt 45 %.
+Der thermische Zustand benötigt den bereits verwendeten kanonischen
+Temperatureingang oberhalb der unveränderten fachlichen Schwelle (`HEAT_TEMP_C`,
+aktuell 24 °C) **und** die bestehende direkte-Sonne-/Solar-Eignung. Dafür werden
+der numerische Luxwert mit dem bestehenden Heat-Lux-Floor, die Sonnenhöhe über
+`HEAT_SUN_MIN_DEG` und die bestehende `HEAT_DAY_STATES`-Phasenmenge gemeinsam
+bewertet. Wetter, Regen oder Bewölkung sind kein Ersatz für direkte Solar-
+Eignung; bei etwa 5.000 lx in `late_afternoon` wird Heat daher nicht allein
+wegen der Temperatur aktiv. Die thermische Zielposition bleibt 45 %.
 
 Glare bleibt eigenständig: Das bestehende Lux-Gate verwendet die Schmitt-Grenzen
 20.000 lx zum Aktivieren und 15.000 lx zum Deaktivieren, die Zwischenzone hält
 den letzten gültigen Zustand. Sonnenwinkel/Tagesphase und die vorhandenen
-TV-/Streaming-/Gaming-Bedingungen wirken nur auf Glare. Die Glare-Zielpositionen
-bleiben 60 % für TV und 75 % für PC-Gaming.
+TV-/Streaming-/Gaming-Bedingungen wirken auf Glare; der Glare-Schmitt-Zustand
+wird nicht als konkurrierender First-Match-Zweig gegen Thermal ausgewertet. Die
+Glare-Zielpositionen bleiben 60 % für TV und 75 % für PC-Gaming.
 
 Sind Heat und Glare gleichzeitig aktiv, gewinnt die stärker schließende Position.
 Die Richtung wird aus dem aktiven Positionsprofil abgeleitet; die Fusion setzt
@@ -40,13 +45,20 @@ Sleep und Privacy behalten ihre bestehende Reihenfolge. Die allgemeine
 Prioritätskette wird nicht neu sortiert. Der Debounce-/Cooldown-Hotfix aus
 Issue #19 bleibt separat und unverändert.
 
-`unknown`, `unavailable` und nichtnumerische Temperaturwerte erzeugen keinen
-neuen gültigen thermischen Zustand. Ein zuvor gültiger thermischer Zustand wird
-bis zur nächsten numerischen Temperaturbewertung gehalten. Gleiches gilt für
-den Lux-/Glare-Gate-Zustand bei transientem Start- oder Reload-Ausfall; sobald
-die numerischen Eingänge wieder verfügbar sind, erfolgt die normale sofortige
-Neubewertung. Ein nicht verfügbarer Glare-Eingang löscht daher keinen gültigen
-Thermal-Schutz.
+`unknown`, `unavailable` und nichtnumerische Temperatur- oder Solarwerte
+erzeugen keinen neuen gültigen thermischen Zustand. Ein zuvor gültiger Zustand
+wird bei einem kurzzeitigen Ausfall gehalten; sobald die numerischen Eingänge
+wieder verfügbar sind, erfolgt die normale sofortige Neubewertung. Ein einzelner
+ausgefallener Glare-Eingang löscht daher keinen gültigen Thermal-Schutz. Der
+Glare-Gate-Zustand wird bei transientem Start- oder Reload-Ausfall ebenfalls
+gehalten.
+
+Der automatische Evening-Privacy-Latch wird bei numerischem, erkennbarem
+Tageslicht in `late_afternoon` zurückgesetzt und in derselben Phase nicht direkt
+wieder gesetzt. Dieser Reset verändert weder `privacy_bed` noch die fachliche
+Privacy bei leerem Haushalt oder einen expliziten manuellen Zustand. Der Trace
+kennzeichnet Privacy als `privacy:evening:auto_latch`,
+`privacy:manual:privacy_bed` oder `privacy:away:household_empty`.
 
 Die aktive Policy und die Combined-/Diagnose-Auswertung verwenden dieselbe
 `ProtectionDemand`. Dadurch können sie bei gleichzeitigem Heat und Glare nicht

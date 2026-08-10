@@ -97,7 +97,7 @@ def _status(hass: HomeAssistant, coord) -> dict[str, Any]:
             "heat_temp_c": HEAT_TEMP_C,
             "heat_sun_min_deg": HEAT_SUN_MIN_DEG,
             "heat_lux_min": coord.heat_lux_min,
-            "heat_lux_min_ignored": True,
+            "heat_lux_min_ignored": False,
             "privacy_latch_lux": PRIVACY_LATCH_LUX,
             "open_weekday_min_minutes": OPEN_WEEKDAY_MIN_MINUTES,
             "open_weekend_min_minutes": OPEN_WEEKEND_MIN_MINUTES,
