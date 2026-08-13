@@ -149,6 +149,34 @@ def test_repeated_fused_protection_target_does_not_duplicate_apply(monkeypatch):
     assert [call[2]["position"] for call in services.calls] == [45]
 
 
+def test_forenoon_to_midday_keeps_heat_target_without_duplicate_apply(monkeypatch):
+    coord, _clock, services, _scheduled, _tasks, current = _make_coordinator(monkeypatch)
+    for phase in (const.PHASE_FORENOON, const.PHASE_MIDDAY):
+        decision = coordinator_module.policy.decide(
+            coordinator_module.policy.Context(
+                window_open=False,
+                bio_state=const.BIO_AWAKE,
+                day_state=phase,
+                presence_household=const.HOUSEHOLD_NOT_EMPTY,
+                lux=30000,
+                sun_elevation=20,
+                outdoor_temp=30,
+            ),
+            gate_on=False,
+            startup_ready=True,
+            apply_enabled=True,
+            manual_override_active=False,
+        )
+        assert decision.mode == const.MODE_HEAT
+        assert decision.protection_demand is not None
+        assert decision.target_position == decision.protection_demand.effective_target_position == 45
+        _run(coord._apply(decision.target_position))
+        current["position"] = decision.target_position
+        coord._writing_active = False
+
+    assert [call[2]["position"] for call in services.calls] == [45]
+
+
 def test_automatic_apply_is_debounced_for_60_seconds(monkeypatch):
     coord, clock, services, scheduled, _tasks, _current = _make_coordinator(monkeypatch)
 

@@ -1,10 +1,10 @@
 # ADR-0001: Gemeinsame Protection Demand für Heat und Glare
 
 - Status: accepted
-- Version: 0.8.3
-- Datum: 2026-08-10
-- Issue: [#23](https://github.com/Levtos/benni_blind_policy/issues/23)
-- Vorgänger: [#21](https://github.com/Levtos/benni_blind_policy/issues/21)
+- Version: 0.8.4
+- Issue: [#25](https://github.com/Levtos/benni_blind_policy/issues/25)
+- Vorgänger: [#23](https://github.com/Levtos/benni_blind_policy/issues/23)
+- Historischer Vorgänger: [#21](https://github.com/Levtos/benni_blind_policy/issues/21)
 - Parent: [#9](https://github.com/Levtos/benni_blind_policy/issues/9)
 
 ## Entscheidung
@@ -21,9 +21,21 @@ Temperatureingang oberhalb der unveränderten fachlichen Schwelle (`HEAT_TEMP_C`
 aktuell 24 °C) **und** die bestehende direkte-Sonne-/Solar-Eignung. Dafür werden
 der numerische Luxwert mit dem bestehenden Heat-Lux-Floor, die Sonnenhöhe über
 `HEAT_SUN_MIN_DEG` und die bestehende `HEAT_DAY_STATES`-Phasenmenge gemeinsam
-bewertet. Wetter, Regen oder Bewölkung sind kein Ersatz für direkte Solar-
-Eignung; bei etwa 5.000 lx in `late_afternoon` wird Heat daher nicht allein
-wegen der Temperatur aktiv. Die thermische Zielposition bleibt 45 %.
+bewertet. Diese Übergangsmenge umfasst `late_morning`, `forenoon`, `midday` und
+`afternoon`; dadurch bleibt Heat beim kanonischen Wechsel nach `midday` bei
+gültiger Solar-Eignung aktiv. Wetter, Regen oder Bewölkung sind kein Ersatz für
+direkte Solar-Eignung; bei etwa 5.000 lx in `late_afternoon` wird Heat daher
+nicht allein wegen der Temperatur aktiv. Die thermische Zielposition bleibt 45 %.
+
+Core State berechnet die globalen, saisonal normalisierten Tagesphasen. Dieser
+Hotfix führt keine eigene Monats-, Kalender-, Uhrzeit-, Sonnenstands- oder
+Tageslängen-Normalisierung in der Blind Policy ein. Die Blind Policy konsumiert
+den kanonischen `day_state` und entscheidet ausschließlich domänenspezifisch
+über Heat/Glare, die gemeinsame `ProtectionDemand` und die Zielposition.
+
+`late_afternoon` bleibt bewusst außerhalb der Heat-Phasenmenge. Das in Issue
+[#23](https://github.com/Levtos/benni_blind_policy/issues/23) festgelegte helle
+`late_afternoon`-Verhalten wird dadurch nicht zurückgebaut.
 
 Glare bleibt eigenständig: Das bestehende Lux-Gate verwendet die Schmitt-Grenzen
 20.000 lx zum Aktivieren und 15.000 lx zum Deaktivieren, die Zwischenzone hält

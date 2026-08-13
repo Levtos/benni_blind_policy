@@ -123,6 +123,7 @@ WEATHER_SUNNY: Final = "sunny"
 PHASE_EARLY_MORNING: Final = "early_morning"
 PHASE_LATE_MORNING: Final = "late_morning"
 PHASE_FORENOON: Final = "forenoon"
+PHASE_MIDDAY: Final = "midday"
 PHASE_AFTERNOON: Final = "afternoon"
 # Canonical transition phase consumed by the current day-state source. It is an
 # internal enum value; no new Home-Assistant entity or configuration is added.
@@ -153,10 +154,10 @@ HEAT_TEMP_C: Final = 24               # Temperaturklasse ≥ 12 ≙ ≥ 24 °C
 # unabhängig unverändert und wird mit diesen Solarbedingungen kombiniert.
 HEAT_SUN_MIN_DEG: Final = 5
 DEFAULT_HEAT_LUX_MIN: Final = 10000
-# late_afternoon bleibt außerhalb der bestehenden Heat-Phasen; dadurch kann die
-# Übergangsphase bei moderatem Tageslicht nicht allein wegen Wärme schließen.
+# midday und afternoon sind die bestehenden kanonischen Tagesphasen für Heat;
+# late_afternoon bleibt bewusst außerhalb dieses Übergangs-Hotfixes.
 HEAT_DAY_STATES: Final = frozenset(
-    {PHASE_LATE_MORNING, PHASE_FORENOON, PHASE_AFTERNOON}
+    {PHASE_LATE_MORNING, PHASE_FORENOON, PHASE_MIDDAY, PHASE_AFTERNOON}
 )
 
 PRIVACY_LATCH_LUX: Final = 400        # Latch-Set < 400 lx während late_evening

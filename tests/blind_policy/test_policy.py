@@ -258,12 +258,37 @@ def test_late_afternoon_cleared_auto_latch_allows_open_fallback():
 @pytest.mark.parametrize("day_state", [
     const.PHASE_LATE_MORNING,
     const.PHASE_FORENOON,
+    const.PHASE_MIDDAY,
     const.PHASE_AFTERNOON,
 ])
 def test_heat_active_from_late_morning_to_afternoon(day_state):
     d = decide(ctx(day_state=day_state, lux=30000,
                    outdoor_temp=25, sun_elevation=20))
     assert d.mode == const.MODE_HEAT
+
+
+@pytest.mark.parametrize("day_state", [
+    const.PHASE_MIDDAY,
+    const.PHASE_AFTERNOON,
+])
+def test_heat_day_phases_stay_inactive_below_lux_floor(day_state):
+    d = decide(ctx(day_state=day_state, lux=const.DEFAULT_HEAT_LUX_MIN - 1,
+                   outdoor_temp=25, sun_elevation=20))
+    assert d.mode == const.MODE_OPEN
+    assert d.protection_demand is not None
+    assert d.protection_demand.thermal_active is False
+
+
+@pytest.mark.parametrize("day_state", [
+    const.PHASE_MIDDAY,
+    const.PHASE_AFTERNOON,
+])
+def test_heat_day_phases_stay_inactive_without_direct_sun(day_state):
+    d = decide(ctx(day_state=day_state, lux=30000,
+                   outdoor_temp=25, sun_elevation=const.HEAT_SUN_MIN_DEG))
+    assert d.mode == const.MODE_OPEN
+    assert d.protection_demand is not None
+    assert d.protection_demand.thermal_active is False
 
 
 def test_heat_requires_a_suitable_solar_phase_and_angle():
@@ -499,9 +524,14 @@ def test_protection_demand_uses_axis_direction_for_inverted_profile():
     assert d.target_position == 55
 
 
-def test_policy_and_diagnostic_trace_share_one_effective_protection_demand():
+@pytest.mark.parametrize("day_state", [
+    const.PHASE_FORENOON,
+    const.PHASE_MIDDAY,
+    const.PHASE_AFTERNOON,
+])
+def test_policy_and_diagnostic_trace_share_one_effective_protection_demand(day_state):
     d = decide(
-        ctx(day_state=const.PHASE_FORENOON, outdoor_temp=30, lux=30000,
+        ctx(day_state=day_state, outdoor_temp=30, lux=30000,
             sun_elevation=30, media_scenario=const.SCENARIO_TV),
         gate_on=True,
     )
