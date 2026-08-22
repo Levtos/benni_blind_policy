@@ -60,7 +60,7 @@ UND Day State in ['early_morning', 'late_morning', 'forenoon', 'afternoon']
 | 3 | `alarm_wakeup` | `living_rollo_alarm_wakeup` == on | Immer inaktiv (Platzhalter) |
 | 4 | `open_weekday` | Day State == late_morning UND Day Context == werktag UND Zeit >= 08:00 | — |
 | 5 | `open_weekend` | Day State == forenoon UND Day Context in [wochenende, frei] UND Zeit >= 09:30 | — |
-| 6 | `sleep` | Bio-State == sleep ODER Day State in [early_night, late_night] ODER (Day State == early_morning UND Bio-State == sleep) | — |
+| 6 | `sleep` | Bio-State == sleep | — |
 | 7 | `heat` | Wetterkategorie == sunny UND Temperaturklasse >= 12 UND Sonnenhöhe > 5° UND Day State in [late_morning, forenoon] UND Bio-State != sleep | — |
 | 8 | `glare_tv` | Gate aktiv UND Media Scenario in [tv, streaming, gaming] UND Gaming Source != pc UND Bio-State != sleep | — |
 | 9 | `glare_pc` | Gate aktiv UND Media Scenario == gaming UND Gaming Source == pc UND Bio-State != sleep | — |

@@ -40,7 +40,7 @@ function ruleConditions(thr = {}) {
     R1: "Fenster offen — absolut (Safety)",
     R2: "Privacy-Bett-Schalter an",
     R3: "Wecker-Schalter an",
-    R4: "Bio = sleep ODER Nachtphase",
+    R4: "Bio = sleep",
     R5: `Haushalt leer ODER Privacy-Latch (Latch abends < ${pl ?? "?"} lx)`,
     R6: `Thermal ≥ ${ht ?? "?"} °C + Solar-Lux ≥ ${hl ?? "?"} lx + Sonne > ${hs ?? "?"}° in Heat-Phase · Glare: Gate > ${go != null ? fmtK(go) : "?"} lx + Sonne > ${gs ?? "?"}°`,
     R7: `Lux-Gate an (> ${go != null ? fmtK(go) : "?"} lx) + TV/Streaming/Gaming + nicht PC`,
