@@ -115,8 +115,7 @@ def test_privacy_latch_active():
 
 
 def test_sleep_beats_privacy_latch():
-    # Regression: abends setzt der Privacy-Latch und schlug bisher den Schlaf.
-    # Sleep (R5) steht jetzt ÜBER Privacy (R6) → bei Bio-sleep gewinnt sleep.
+    # Sleep gewinnt gegen Privacy, wenn der Bio-State tatsächlich `sleep` ist.
     d = decide(ctx(privacy_latch=True, bio_state=const.BIO_SLEEP,
                    day_state=const.PHASE_EARLY_NIGHT))
     assert d.mode == const.MODE_SLEEP
@@ -137,7 +136,7 @@ def test_alarm_wakeup_prio3():
 
 
 def test_alarm_wakeup_beats_sleep():
-    # Wecken schlägt Schlaf: alarm (R3) über sleep (R5).
+    # Wecken schlägt Schlaf: alarm (R3) steht über sleep (R4).
     d = decide(ctx(alarm_wakeup=True, bio_state=const.BIO_SLEEP,
                    day_state=const.PHASE_LATE_NIGHT))
     assert d.mode == const.MODE_ALARM_WAKEUP
@@ -184,9 +183,17 @@ def test_sleep_bio():
     assert d.target_position == 40
 
 
-def test_sleep_night_phase():
-    d = decide(ctx(day_state=const.PHASE_LATE_NIGHT))
-    assert d.mode == const.MODE_SLEEP
+@pytest.mark.parametrize("day_state", [
+    const.PHASE_EARLY_NIGHT,
+    const.PHASE_LATE_NIGHT,
+])
+@pytest.mark.parametrize("bio_state", [const.BIO_AWAKE, const.BIO_WAKING])
+def test_night_phase_uses_privacy_not_sleep(day_state, bio_state):
+    d = decide(ctx(day_state=day_state, bio_state=bio_state, privacy_latch=True))
+    assert d.mode == const.MODE_PRIVACY
+    sleep_trace = next(entry for entry in d.trace if entry.rule == "R4")
+    assert sleep_trace.matched is False
+    assert sleep_trace.reason == "sleep:Bio-State sleep"
 
 
 def test_early_morning_awake_is_not_sleep():

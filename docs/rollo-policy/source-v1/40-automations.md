@@ -101,18 +101,16 @@ UND Uhrzeit >= 09:30
 
 ## R7 — Sleep (Prio 6)
 
-**Trigger:** Bio-State wechselt auf `sleep` ODER Day State wechselt auf `early_night` / `late_night`
+**Trigger:** Bio-State wechselt auf `sleep`
 
 **Bedingung:**
 ```
 Bio-State == 'sleep'
-ODER Day State in ['early_night', 'late_night']
-ODER (Day State == 'early_morning' UND Bio-State == 'sleep')
 ```
 
 **Zielposition:** 40% (via `sensor.living_rollo_mode` → `living_rollo_apply_position`)
 
-**Hinweis:** `waking` wird wie `awake` behandelt — greift hier nicht. Sonderfall `early_morning`: nur wenn Bio-State == `sleep`.
+**Hinweis:** `waking` und alle Tagesphasen werden wie `awake` behandelt — sie aktivieren Sleep nicht. Die Nachtphase aktiviert stattdessen ausschließlich den bestehenden Privacy-Latch.
 
 ---
 

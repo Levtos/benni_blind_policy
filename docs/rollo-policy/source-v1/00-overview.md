@@ -96,7 +96,7 @@ Automatisierte Steuerung des elektrischen Verdunklungsrollos im Wohnzimmer (Süd
 | 3 | `alarm_wakeup` | 100% | Platzhalter Wecker-Modul (immer inaktiv) |
 | 4 | `open_weekday` | 100% | Natürlicher Wecker werktags |
 | 5 | `open_weekend` | 100% | Natürlicher Wecker wochenends/frei |
-| 6 | `sleep` | 40% | Bio-State sleep oder Nachtphasen |
+| 6 | `sleep` | 40% | Ausschließlich Bio-State sleep |
 | 7 | `heat` | 45% | Direkter Sonnenschutz |
 | 8 | `glare_tv` | 60% | Blendschutz TV/Streaming/Gaming (TV-Stack) |
 | 9 | `glare_pc` | 75% | Blendschutz PC-Monitor |

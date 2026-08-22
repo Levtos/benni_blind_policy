@@ -96,7 +96,7 @@ Automatisierte Steuerung des elektrischen Verdunklungsrollos im Wohnzimmer (Süd
 | 3 | `alarm_wakeup` | 100% | Platzhalter Wecker-Modul (immer inaktiv) |
 | 4 | `open_weekday` | 100% | Natürlicher Wecker werktags |
 | 5 | `open_weekend` | 100% | Natürlicher Wecker wochenends/frei |
-| 6 | `sleep` | 40% | Bio-State sleep oder Nachtphasen |
+| 6 | `sleep` | 40% | Ausschließlich Bio-State sleep |
 | 7 | `heat` | 45% | Direkter Sonnenschutz |
 | 8 | `glare_tv` | 60% | Blendschutz TV/Streaming/Gaming (TV-Stack) |
 | 9 | `glare_pc` | 75% | Blendschutz PC-Monitor |
@@ -191,16 +191,12 @@ Schlägt Sleep bewusst. `frei` wird wie `wochenende` behandelt.
 **Bedingung:**
 ```
 Bio-State == 'sleep'
-ODER Day State in ['early_night', 'late_night']
-ODER (Day State == 'early_morning' UND Bio-State == 'sleep')
 ```
 **Zielposition:** 40%
 
-`waking` wird wie `awake` behandelt — greift hier nicht.
-
-**Sonderfall `early_morning`:**
-- `early_morning` + `sleep` → Sleep greift → 40%
-- `early_morning` + `awake` oder `waking` → Sleep greift nicht → Fallback `open` → 100%
+`waking` und alle Tagesphasen werden wie `awake` behandelt — sie aktivieren Sleep
+nicht. Die Nachtphase aktiviert stattdessen ausschließlich den bestehenden
+Privacy-Latch.
 
 ---
 

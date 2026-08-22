@@ -1,7 +1,9 @@
 """Pure Decision-Engine für die Blind-Policy (Wohnzimmer-Rollo) — HA-frei, voll testbar.
 
 Implementiert das reviewte Lastenheft
-``einhornzentrale/docs/lastenhefte/reviewed/rollo/`` 1:1:
+``einhornzentrale/docs/lastenhefte/reviewed/rollo/`` mit der in Issue #28
+entschiedenen Korrektur: Sleep wird ausschließlich durch den Bio-State
+``sleep`` aktiviert:
 
   * ``lux_gate()``     — Schmitt-Trigger (20k/15k) mit Sonnenhöhe + Tagesphasen-Gate,
                          zustandsbehaftet via ``prev_gate`` (Hysterese hält der Coordinator).
@@ -52,11 +54,9 @@ from .const import (
     MODE_PRIVACY_BED,
     MODE_SLEEP,
     MODE_WINDOW_OPEN,
-    PHASE_EARLY_MORNING,
     PHASE_EARLY_NIGHT,
     PHASE_LATE_AFTERNOON,
     PHASE_LATE_EVENING,
-    PHASE_LATE_NIGHT,
     PRIVACY_LATCH_LUX,
     SCENARIO_GAMING,
     SCENARIO_IDLE,
@@ -399,12 +399,8 @@ def _heat_active(
 
 
 def _sleep_active(n: _Norm) -> bool:
-    """Bio sleep, Nachtphasen, oder early_morning+sleep. `waking` zählt nicht."""
-    return (
-        n.bio_state == BIO_SLEEP
-        or n.day_state in (PHASE_EARLY_NIGHT, PHASE_LATE_NIGHT)
-        or (n.day_state == PHASE_EARLY_MORNING and n.bio_state == BIO_SLEEP)
-    )
+    """Sleep ist ausschließlich der kanonische Bio-State `sleep`."""
+    return n.bio_state == BIO_SLEEP
 
 
 def _build_protection_demand(
@@ -573,7 +569,7 @@ def evaluate_chain(
             "R3", MODE_ALARM_WAKEUP, bool(n.alarm_wakeup),
             _position(MODE_ALARM_WAKEUP, profile), reason="alarm_wakeup:fachlicher Weckerzustand",
         ),
-        RuleEval("R4", MODE_SLEEP, _sleep_active(n), _position(MODE_SLEEP, profile), reason="sleep:Bio- oder Nachtzustand"),
+        RuleEval("R4", MODE_SLEEP, _sleep_active(n), _position(MODE_SLEEP, profile), reason="sleep:Bio-State sleep"),
         RuleEval(
             "R5", MODE_PRIVACY,
             n.presence_household == HOUSEHOLD_EMPTY or n.privacy_latch,
@@ -612,7 +608,7 @@ _REASONS: dict[str, str] = {
     MODE_ALARM_WAKEUP: "alarm_wakeup: Wecker-Platzhalter aktiv",
     MODE_OPEN_WEEKDAY: "open_weekday: natürlicher Wecker werktags",
     MODE_OPEN_WEEKEND: "open_weekend: natürlicher Wecker wochenends/frei",
-    MODE_SLEEP: "sleep: Bio sleep oder Nachtphase",
+    MODE_SLEEP: "sleep: Bio-State sleep",
     MODE_HEAT: f"heat: thermischer Hitzeschutz ab {HEAT_TEMP_C} °C",
     MODE_GLARE_TV: "glare_tv: Blendschutz TV-Stack bei aktivem Lux-Gate",
     MODE_GLARE_PC: "glare_pc: Blendschutz PC-Monitor bei aktivem Lux-Gate",
