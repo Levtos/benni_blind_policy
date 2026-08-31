@@ -33,7 +33,7 @@ Quellen (core_state · core_devices · media_state · DWD)
 | R1 | `window_open` | 100 | Fenster offen — absolut, ignoriert Override |
 | R2 | `privacy_bed` | 40 | Manueller Bett-Modus |
 | R3 | `alarm_wakeup` | 100 | Wecker-Platzhalter |
-| R4 | `sleep` | 40 | Bio sleep / Nachtphasen |
+| R4 | `sleep` | 5 | Bio `provisional_sleep` oder `sleep` |
 | R5 | `privacy` | 40 | Haushalt leer ODER Privacy-Latch |
 | R6 | `ProtectionDemand` | 45/60/75 | Heat und Glare unabhängig, danach stärker schließend fusioniert |
 | R7/R8 | `glare_tv` / `glare_pc` | 60/75 | Diagnosezeilen, keine konkurrierenden Policy-Zweige |
@@ -49,6 +49,12 @@ Thermal-Zustand; numerische Werte lösen die Neubewertung sofort aus. Helles
 ausführliche Entscheidung steht in
 [`docs/adr/0001-heat-glare-protection-demand.md`](docs/adr/0001-heat-glare-protection-demand.md).
 
+Für Consumer gilt der Core-State-Vertrag
+`effective_sleep = bio_state in {provisional_sleep, sleep}`. `waking` beendet
+R4 weiterhin. Das normale und das invertierte Benni-Profil enthalten für R4
+jeweils die direkte Geräteposition 5 %. Explizit gespeicherte Profilwerte haben
+Vorrang und werden bei Updates nicht automatisch überschrieben.
+
 ## Output-Entities (Profil benni)
 
 `sensor.benni_blind_policy_mode` · `_position` · `_debug`,
@@ -57,6 +63,10 @@ ausführliche Entscheidung steht in
 `switch.benni_blind_policy_privacy_bed` · `_alarm_wakeup` · `_manual_override` · `_apply_enabled`.
 
 ## Status
+
+**v0.8.6 – Issue #59 Live-Audit-Fix.** R4 konsumiert PS/S als gemeinsamen
+Schlafkontext; der sichere Benni-Default für Sleep ist in beiden direkten
+Positionsprofilen 5 %. Bestehende Options-Overrides bleiben unverändert.
 
 **v0.1.1 — FLEET-54 source migration.** Default/Migration für den Window-Open-
 Contract zeigt auf `sensor.benni_combined_opening_unsafe_for_rollo` aus

@@ -140,6 +140,30 @@ def test_identical_target_position_does_not_call_service(monkeypatch):
     assert services.calls == []
 
 
+def test_r4_sleep_target_applies_only_for_real_position_difference(monkeypatch):
+    coord, _clock, services, _scheduled, _tasks, current = _make_coordinator(monkeypatch)
+    current["position"] = 5
+    _run(coord._apply(5))
+    assert services.calls == []
+
+    current["position"] = 40
+    _run(coord._apply(5))
+    assert [call[2]["position"] for call in services.calls] == [5]
+
+
+def test_profile_options_preserve_explicit_sleep_override(monkeypatch):
+    coord, _clock, _services, _scheduled, _tasks, _current = _make_coordinator(monkeypatch)
+    assert coord.position_profile[const.MODE_SLEEP] == 5
+    assert coord.position_profile_inverted[const.MODE_SLEEP] == 5
+
+    coord.entry.options = {
+        const.CONF_POSITION_PROFILE: {const.MODE_SLEEP: 40},
+        const.CONF_POSITION_PROFILE_INVERTED: {const.MODE_SLEEP: 35},
+    }
+    assert coord.position_profile[const.MODE_SLEEP] == 40
+    assert coord.position_profile_inverted[const.MODE_SLEEP] == 35
+
+
 def test_repeated_fused_protection_target_does_not_duplicate_apply(monkeypatch):
     coord, _clock, services, _scheduled, _tasks, current = _make_coordinator(monkeypatch)
     _run(coord._apply(45))

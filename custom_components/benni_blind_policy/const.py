@@ -78,7 +78,7 @@ DEFAULT_POSITION_PROFILE: Final[dict[str, int]] = {
     MODE_ALARM_WAKEUP: 100,
     MODE_OPEN_WEEKDAY: 100,
     MODE_OPEN_WEEKEND: 100,
-    MODE_SLEEP: 40,
+    MODE_SLEEP: 5,
     MODE_HEAT: 45,
     MODE_GLARE_TV: 60,
     MODE_GLARE_PC: 75,
@@ -86,17 +86,20 @@ DEFAULT_POSITION_PROFILE: Final[dict[str, int]] = {
 }
 
 # Zweites, UNABHÄNGIGES Profil für die invertierte Achse (Schalter wählt, welches
-# Profil aktiv ist — kein 100−x-Mirror mehr am Apply). Default = gespiegeltes
-# Normal-Profil, damit die Out-of-Box-/Live-Verhalten unverändert bleiben; jeder
-# Wert ist frei editierbar (z. B. sleep 40/40 statt 40/60).
+# Profil aktiv ist — kein 100−x-Mirror mehr am Apply). Die Defaultwerte sind
+# gespiegelt, außer beim verbindlichen R4-Sleep-Ziel; jeder Wert ist frei
+# editierbar. Sleep bleibt in beiden Profilen eine direkte
+# Geräteposition von 5 %, weil die Profilwahl keinen Apply-Mirror ausführt.
 DEFAULT_POSITION_PROFILE_INVERTED: Final[dict[str, int]] = {
-    mode: 100 - pos for mode, pos in DEFAULT_POSITION_PROFILE.items()
+    mode: 5 if mode == MODE_SLEEP else 100 - pos
+    for mode, pos in DEFAULT_POSITION_PROFILE.items()
 }
 
 # --------------------------------------------------------------------------- #
 # Eingangs-Wertebereiche (konsumiert aus core_state / media_state / DWD)
 # --------------------------------------------------------------------------- #
 BIO_SLEEP: Final = "sleep"
+BIO_PROVISIONAL_SLEEP: Final = "provisional_sleep"
 BIO_WAKING: Final = "waking"
 BIO_AWAKE: Final = "awake"
 
