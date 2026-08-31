@@ -1,6 +1,9 @@
 """Tests for ConfigEntry source migrations."""
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import bbp_const as const
 import bbp_migration as migration
 
@@ -57,3 +60,33 @@ def test_migration_is_noop_for_current_master_source():
     assert changed is False
     assert data[const.CONF_BLIND_MASTER] == const.CORE_BLIND_MASTER_ENTITY
     assert options == {}
+
+
+def test_migration_does_not_inject_new_default_or_overwrite_explicit_sleep():
+    changed, _data, options = migration.migrate_source_ids(
+        {const.CONF_BLIND_MASTER: const.CORE_BLIND_MASTER_ENTITY},
+        {const.CONF_POSITION_PROFILE: {const.MODE_SLEEP: 40}},
+    )
+
+    assert changed is False
+    assert options[const.CONF_POSITION_PROFILE][const.MODE_SLEEP] == 40
+
+    changed, _data, options = migration.migrate_source_ids(
+        {const.CONF_BLIND_MASTER: const.CORE_BLIND_MASTER_ENTITY},
+        {},
+    )
+    assert changed is False
+    assert const.CONF_POSITION_PROFILE not in options
+
+
+def test_manifest_has_no_blind_control_dependency():
+    manifest = json.loads(
+        (
+            Path(__file__).parents[2]
+            / "custom_components"
+            / "benni_blind_policy"
+            / "manifest.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert "blind_control" not in manifest.get("dependencies", [])
+    assert "blind_control" not in manifest.get("after_dependencies", [])

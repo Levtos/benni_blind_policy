@@ -43,7 +43,7 @@ def protection(c, *, gate_on=False, **kw):
 # --------------------------------------------------------------------------- #
 # Positionen je Modus (Lastenheft §6)
 # --------------------------------------------------------------------------- #
-def test_default_position_profile_matches_lastenheft():
+def test_default_position_profile_matches_binding_issue59_contract():
     p = const.DEFAULT_POSITION_PROFILE
     assert p[const.MODE_WINDOW_OPEN] == 100
     assert p[const.MODE_PRIVACY_BED] == 40
@@ -51,7 +51,8 @@ def test_default_position_profile_matches_lastenheft():
     assert p[const.MODE_ALARM_WAKEUP] == 100
     assert p[const.MODE_OPEN_WEEKDAY] == 100
     assert p[const.MODE_OPEN_WEEKEND] == 100
-    assert p[const.MODE_SLEEP] == 40
+    assert p[const.MODE_SLEEP] == 5
+    assert const.DEFAULT_POSITION_PROFILE_INVERTED[const.MODE_SLEEP] == 5
     assert p[const.MODE_HEAT] == 45
     assert p[const.MODE_GLARE_TV] == 60
     assert p[const.MODE_GLARE_PC] == 75
@@ -177,10 +178,15 @@ def test_awake_weekend_forenoon_is_open():
     assert d.mode == const.MODE_OPEN
 
 
-def test_sleep_bio():
-    d = decide(ctx(bio_state=const.BIO_SLEEP))
+@pytest.mark.parametrize(
+    "bio_state", [const.BIO_PROVISIONAL_SLEEP, const.BIO_SLEEP]
+)
+def test_effective_sleep_bio_selects_r4_with_five_percent(bio_state):
+    d = decide(ctx(bio_state=bio_state))
     assert d.mode == const.MODE_SLEEP
-    assert d.target_position == 40
+    assert d.target_position == 5
+    sleep_trace = next(entry for entry in d.trace if entry.rule == "R4")
+    assert sleep_trace.matched is True
 
 
 @pytest.mark.parametrize("day_state", [
@@ -193,7 +199,7 @@ def test_night_phase_uses_privacy_not_sleep(day_state, bio_state):
     assert d.mode == const.MODE_PRIVACY
     sleep_trace = next(entry for entry in d.trace if entry.rule == "R4")
     assert sleep_trace.matched is False
-    assert sleep_trace.reason == "sleep:Bio-State sleep"
+    assert sleep_trace.reason == "sleep:Bio-State provisional_sleep|sleep"
 
 
 def test_early_morning_awake_is_not_sleep():
@@ -757,11 +763,17 @@ def test_manual_override_reset_on_sleep_entry():
     assert policy.manual_override_should_reset_on_sleep(
         const.BIO_SLEEP, const.BIO_WAKING
     ) is True
+    assert policy.manual_override_should_reset_on_sleep(
+        const.BIO_PROVISIONAL_SLEEP, const.BIO_AWAKE
+    ) is True
 
 
 def test_manual_override_no_reset_without_sleep_entry():
     assert policy.manual_override_should_reset_on_sleep(
         const.BIO_SLEEP, const.BIO_SLEEP
+    ) is False
+    assert policy.manual_override_should_reset_on_sleep(
+        const.BIO_SLEEP, const.BIO_PROVISIONAL_SLEEP
     ) is False
 
 
@@ -837,10 +849,11 @@ def test_mirror_position_is_involution():
         assert policy.mirror_position(policy.mirror_position(p, True), True) == p
 
 
-def test_default_inverted_profile_is_mirror_of_normal():
-    """Zwei-Profile-Modell: das Invert-Default ist der Spiegel des Normal-Defaults."""
+def test_default_inverted_profile_mirrors_except_direct_sleep_target():
+    """Sleep is the same direct 5 % device target on either stored profile."""
     for mode, pos in const.DEFAULT_POSITION_PROFILE.items():
-        assert const.DEFAULT_POSITION_PROFILE_INVERTED[mode] == 100 - pos
+        expected = 5 if mode == const.MODE_SLEEP else 100 - pos
+        assert const.DEFAULT_POSITION_PROFILE_INVERTED[mode] == expected
     # gleiche Modus-Menge, keine Lücken
     assert set(const.DEFAULT_POSITION_PROFILE_INVERTED) == set(const.DEFAULT_POSITION_PROFILE)
 

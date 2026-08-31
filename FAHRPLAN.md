@@ -26,6 +26,15 @@
       `_logical_position()` zurückgespiegelt. Kompensiert eine umgekehrte
       Fahrtrichtung am Gerät. 64 Tests grün.
 
+## Erledigt (v0.8.6, benni-core-state#59)
+
+- [x] R4 konsumiert `provisional_sleep` und `sleep` als gemeinsamen effektiven
+      Schlafkontext; `waking` bleibt Wake-/Open-Kontext.
+- [x] Benni-Sleep-Ziel ist in beiden direkten Positionsprofilen 5 %.
+- [x] Fehlende Profiloptionen übernehmen den neuen Default; explizit gespeicherte
+      Benutzerwerte bleiben unverändert und werden nicht still migriert.
+- [x] Apply bleibt abweichungsgetrieben und `blind_control` bleibt außerhalb des Pfads.
+
 ## Offen / nur live verifizierbar (kein HA lokal)
 
 - [ ] **Live-Verify in HA:** Config-Entry anlegen (Profil benni), Quellen bestätigen,
@@ -45,7 +54,7 @@
 ## Review-Punkte (beim Live-Test gezielt prüfen)
 
 - [ ] **Override-Reset-Ordering (R-MO):** Manual-Override loest sich beim naechsten
-      Bio-State-Eintritt `sleep`. `_reset_override_on_sleep` muss bewusst VOR
+      Eintritt in den effektiven Bio-Schlafkontext (PS/S). `_reset_override_on_sleep` muss bewusst VOR
       `_update_privacy_latch` laufen, damit `_prev_bio` noch den Vorzyklus-Wert haelt
       und die Sleep-Entscheidung im selben Evaluate wieder anwenden kann.
 - [ ] **Window-Contract-Semantik:** R1 verlangt „Flügel offen (Status 2)", NICHT Kipp (Status 1).

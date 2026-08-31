@@ -1,9 +1,9 @@
 """Pure Decision-Engine für die Blind-Policy (Wohnzimmer-Rollo) — HA-frei, voll testbar.
 
 Implementiert das reviewte Lastenheft
-``einhornzentrale/docs/lastenhefte/reviewed/rollo/`` mit der in Issue #28
-entschiedenen Korrektur: Sleep wird ausschließlich durch den Bio-State
-``sleep`` aktiviert:
+``einhornzentrale/docs/lastenhefte/reviewed/rollo/`` mit dem verbindlichen
+Issue-#59-Consumer-Contract: R4 wird durch ``provisional_sleep`` oder ``sleep``
+aktiviert:
 
   * ``lux_gate()``     — Schmitt-Trigger (20k/15k) mit Sonnenhöhe + Tagesphasen-Gate,
                          zustandsbehaftet via ``prev_gate`` (Hysterese hält der Coordinator).
@@ -27,6 +27,7 @@ from typing import Any
 
 from .const import (
     BIO_AWAKE,
+    BIO_PROVISIONAL_SLEEP,
     BIO_SLEEP,
     BIO_WAKING,
     DAY_CONTEXT_WOCHENENDE,
@@ -399,8 +400,14 @@ def _heat_active(
 
 
 def _sleep_active(n: _Norm) -> bool:
-    """Sleep ist ausschließlich der kanonische Bio-State `sleep`."""
-    return n.bio_state == BIO_SLEEP
+    """R4 consumes Core State's effective PS/S sleep context."""
+    return effective_sleep(n.bio_state)
+
+
+def effective_sleep(bio_state: str | None) -> bool:
+    """Return whether a canonical Bio value is a Consumer sleep context."""
+
+    return bio_state in {BIO_PROVISIONAL_SLEEP, BIO_SLEEP}
 
 
 def _build_protection_demand(
@@ -569,7 +576,13 @@ def evaluate_chain(
             "R3", MODE_ALARM_WAKEUP, bool(n.alarm_wakeup),
             _position(MODE_ALARM_WAKEUP, profile), reason="alarm_wakeup:fachlicher Weckerzustand",
         ),
-        RuleEval("R4", MODE_SLEEP, _sleep_active(n), _position(MODE_SLEEP, profile), reason="sleep:Bio-State sleep"),
+        RuleEval(
+            "R4",
+            MODE_SLEEP,
+            _sleep_active(n),
+            _position(MODE_SLEEP, profile),
+            reason="sleep:Bio-State provisional_sleep|sleep",
+        ),
         RuleEval(
             "R5", MODE_PRIVACY,
             n.presence_household == HOUSEHOLD_EMPTY or n.privacy_latch,
@@ -608,7 +621,7 @@ _REASONS: dict[str, str] = {
     MODE_ALARM_WAKEUP: "alarm_wakeup: Wecker-Platzhalter aktiv",
     MODE_OPEN_WEEKDAY: "open_weekday: natürlicher Wecker werktags",
     MODE_OPEN_WEEKEND: "open_weekend: natürlicher Wecker wochenends/frei",
-    MODE_SLEEP: "sleep: Bio-State sleep",
+    MODE_SLEEP: "sleep: Bio-State provisional_sleep|sleep",
     MODE_HEAT: f"heat: thermischer Hitzeschutz ab {HEAT_TEMP_C} °C",
     MODE_GLARE_TV: "glare_tv: Blendschutz TV-Stack bei aktivem Lux-Gate",
     MODE_GLARE_PC: "glare_pc: Blendschutz PC-Monitor bei aktivem Lux-Gate",
@@ -746,11 +759,11 @@ def manual_override_should_reset_on_sleep(
     bio_state: str | None,
     prev_bio_state: str | None,
 ) -> bool:
-    """Reset active manual override when a new sleep bio phase starts."""
+    """Reset an override once when entering the effective PS/S context."""
     return (
         prev_bio_state is not None
-        and prev_bio_state != BIO_SLEEP
-        and bio_state == BIO_SLEEP
+        and not effective_sleep(prev_bio_state)
+        and effective_sleep(bio_state)
     )
 
 
